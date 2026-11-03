@@ -873,7 +873,16 @@ async function grabSource() {
       const opt = {};
       if (caps.imageWidth && caps.imageHeight) { opt.imageWidth = caps.imageWidth.max; opt.imageHeight = caps.imageHeight.max; }
       const blob = await ic.takePhoto(opt);
-      const bmp = await createImageBitmap(blob);
+      let bmp = await createImageBitmap(blob);
+      // samakan framing dengan pratinjau: potong tengah sesuai rasio video
+      const vr = video.videoWidth / video.videoHeight, br = bmp.width / bmp.height;
+      if (vr && Math.abs(vr - br) / vr > 0.01) {
+        let cw = bmp.width, ch = bmp.height;
+        if (br > vr) cw = Math.round(bmp.height * vr); else ch = Math.round(bmp.width / vr);
+        const cropped = await createImageBitmap(bmp, Math.round((bmp.width - cw) / 2), Math.round((bmp.height - ch) / 2), cw, ch);
+        bmp.close();
+        bmp = cropped;
+      }
       return { src: bmp, sw: bmp.width, sh: bmp.height, mirror };
     } catch (e) { /* jatuh ke frame video */ }
   }
