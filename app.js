@@ -811,6 +811,20 @@ function tunePerf(now) {
   } else PERF.calm = 0;
 }
 
+let fitKey = '';
+function fitView() {
+  const st = $('#stage'), gc = previewR.canvas;
+  const cur = gc.hidden ? view : gc;
+  if (!cur.width || !cur.height) return;
+  const cw = st.clientWidth, ch = st.clientHeight, a = cur.width / cur.height;
+  const key = cw + '|' + ch + '|' + cur.width + '|' + cur.height;
+  if (key === fitKey) return;
+  fitKey = key;
+  const w = Math.min(cw, ch * a), h = w / a;
+  [view, gc, $('#grid'), $('#flash')].forEach((el) => { el.style.width = w + 'px'; el.style.height = h + 'px'; });
+}
+window.addEventListener('resize', () => { fitKey = ''; S.dirty = true; });
+
 function frame(now) {
   requestAnimationFrame(frame);
   if (!glOK) return;
@@ -846,11 +860,26 @@ function frame(now) {
       compose(view, gc, p);
       view.hidden = false; gc.hidden = true;
     }
+    fitView();
   } catch (e) { console.error(e); }
 }
 
 /* ---------- Kamera ---------- */
 const RES = { max: [4096, 2160], '4k': [3840, 2160], fhd: [1920, 1080], hd: [1280, 720] };
+
+// Bentuk (aspek) kamera = bentuk hasil foto. "Asli" = 4:3 seperti kamera bawaan HP.
+function streamAspect() {
+  const r = S.ratio;
+  if (r === '16:9' || r === '9:16') return 16 / 9;
+  if (r === '3:2') return 3 / 2;
+  return 4 / 3;
+}
+function camSize() {
+  const rw = (RES[S.camRes] || RES.fhd)[0], asp = streamAspect();
+  const cap = S.camRes === 'fhd' || S.camRes === 'hd'; // jangan diam-diam memakai 4K
+  const dim = (v) => (cap ? { ideal: v, max: 2560 } : { ideal: v });
+  return { width: dim(rw), height: dim(Math.round(rw / asp)), aspectRatio: { ideal: asp } };
+}
 
 function showMsg(text) {
   $('#msgText').textContent = text;
@@ -870,16 +899,11 @@ async function startCamera() {
     showMsg('Browser ini tidak mendukung akses kamera, atau halaman tidak dibuka lewat HTTPS. Kamu tetap bisa membuka foto dari galeri.');
     return;
   }
-  const [rw, rh] = RES[S.camRes] || RES.max;
+  S.streamAsp = streamAspect();
   try {
     stream = await navigator.mediaDevices.getUserMedia({
       audio: false,
-      video: {
-        facingMode: { ideal: S.facing },
-        // Full HD/HD: batasi agar kamera tidak diam-diam memakai 4K (berat & pratinjau bergerigi)
-        width: S.camRes === 'fhd' || S.camRes === 'hd' ? { ideal: rw, max: 2560 } : { ideal: rw },
-        height: S.camRes === 'fhd' || S.camRes === 'hd' ? { ideal: rh, max: 2560 } : { ideal: rh },
-      },
+      video: { facingMode: { ideal: S.facing }, ...camSize() },
     });
   } catch (e) {
     const denied = e && (e.name === 'NotAllowedError' || e.name === 'SecurityError');
@@ -893,7 +917,7 @@ async function startCamera() {
     try {
       const caps = track.getCapabilities();
       if (caps.width && caps.height) {
-        await track.applyConstraints({ width: { ideal: caps.width.max }, height: { ideal: caps.height.max } });
+        await track.applyConstraints({ width: { ideal: caps.width.max }, height: { ideal: caps.height.max }, aspectRatio: { ideal: streamAspect() } });
       }
     } catch (e) { /* tetap pakai resolusi default */ }
   }
@@ -970,7 +994,6 @@ async function burstHiRes(vr) {
   const L = Math.min(4096, Math.max((caps.width && caps.width.max) || 0, (caps.height && caps.height.max) || 0) || 3840);
   const want = vr < 1 ? { width: { ideal: Math.round(L * vr) }, height: { ideal: L } }
                       : { width: { ideal: L }, height: { ideal: Math.round(L / vr) } };
-  const [rw, rh] = RES[S.camRes] || RES.fhd;
   try {
     await track.applyConstraints({ ...want, aspectRatio: { ideal: vr } });
     await new Promise((res) => {
@@ -985,7 +1008,7 @@ async function burstHiRes(vr) {
     if (video.videoWidth * video.videoHeight > before * 1.3) return await createImageBitmap(video);
     return null;
   } finally {
-    try { await track.applyConstraints({ width: { ideal: rw, max: 2560 }, height: { ideal: rh, max: 2560 } }); } catch (e) { /* abaikan */ }
+    try { await track.applyConstraints(camSize()); } catch (e) { /* abaikan */ }
   }
 }
 
@@ -1172,6 +1195,7 @@ function buildUI() {
       saveSettings();
       S.dirty = true;
       if (key === 'camRes' && S.mode === 'camera') startCamera();
+      if (key === 'ratio' && S.mode === 'camera' && streamAspect() !== S.streamAsp) startCamera();
     };
   };
   bind('#setCamRes', 'camRes'); bind('#setExport', 'exportSize'); bind('#setFormat', 'format');
