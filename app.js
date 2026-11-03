@@ -250,14 +250,8 @@ function mulberry(a) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
-let patCache = { key: '', cv: null };
-function patternLayer(name, w, h) {
-  const key = `${name}|${w}|${h}`;
-  if (patCache.key === key) return patCache.cv;
+function drawPattern(ctx, name, w, h) {
   const def = PATTERNS[name];
-  const cv = document.createElement('canvas');
-  cv.width = w; cv.height = h;
-  const ctx = cv.getContext('2d');
   const rnd = mulberry([...name].reduce((a, ch) => a * 31 + ch.charCodeAt(0), 7));
   const m = Math.min(w, h);
   const n = Math.max(60, Math.min(260, Math.round(def.n * 1.7 * (w * h) / 1e6)));
@@ -289,8 +283,6 @@ function patternLayer(name, w, h) {
       ctx.restore();
     }
   }
-  patCache = { key, cv };
-  return cv;
 }
 PRESETS.forEach((p) => { p.c = p.c || 'Klasik'; });
 
@@ -423,28 +415,29 @@ void main(){
   }
 
   // sharpen / soft
-  vec3 blur = (tex(vUv + vec2(uPx.x, 0.0)) + tex(vUv - vec2(uPx.x, 0.0))
-             + tex(vUv + vec2(0.0, uPx.y)) + tex(vUv - vec2(0.0, uPx.y))) * 0.25;
-  col += (col - blur) * uSharp * 1.6;
+  if (uSharp > 0.0) {
+    vec3 blur = (tex(vUv + vec2(uPx.x, 0.0)) + tex(vUv - vec2(uPx.x, 0.0))
+               + tex(vUv + vec2(0.0, uPx.y)) + tex(vUv - vec2(0.0, uPx.y))) * 0.25;
+    col += (col - blur) * uSharp * 1.6;
+  }
   if (uSoft > 0.0) {
     vec3 wide = vec3(0.0);
-    for (int i = 0; i < 8; i++) {
-      float a = float(i) * 0.785398;
+    for (int i = 0; i < 6; i++) {
+      float a = float(i) * 1.047198;
       wide += tex(vUv + vec2(cos(a) / uAspect, sin(a)) * 0.006);
     }
-    col = mix(col, wide / 8.0, uSoft);
+    col = mix(col, wide / 6.0, uSoft);
   }
 
-  // bloom (highlight glow)
+  // bloom (highlight glow) — 8 sampel, radius bergantian
   if (uBloom > 0.0) {
     vec3 b = vec3(0.0);
     for (int i = 0; i < 8; i++) {
-      float a = float(i) * 0.785398;
-      vec2 d = vec2(cos(a) / uAspect, sin(a));
-      b += max(tex(vUv + d * 0.010) - 0.62, 0.0);
-      b += max(tex(vUv + d * 0.024) - 0.62, 0.0);
+      float a = float(i) * 0.785398 + 0.3;
+      float rad = (i % 2 == 0) ? 0.010 : 0.024;
+      b += max(tex(vUv + vec2(cos(a) / uAspect, sin(a)) * rad) - 0.62, 0.0);
     }
-    col += b / 16.0 * uBloom * 2.4;
+    col += b / 8.0 * uBloom * 2.4;
   }
 
   // tone dasar
@@ -545,7 +538,9 @@ const UNIFORMS = {
 class Renderer {
   constructor(canvas) {
     this.canvas = canvas;
-    const gl = canvas.getContext('webgl2', { alpha: false, antialias: false, preserveDrawingBuffer: true });
+    const gl = canvas.getContext('webgl2', {
+      alpha: false, antialias: false, depth: false, stencil: false, powerPreference: 'high-performance',
+    });
     if (!gl) throw new Error('WebGL2 tidak tersedia');
     this.gl = gl;
     const sh = (type, src) => {
@@ -584,7 +579,13 @@ class Renderer {
     }
     gl.viewport(0, 0, w, h);
     gl.bindTexture(gl.TEXTURE_2D, this.tex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
+    const tw = src.videoWidth || src.width, th = src.videoHeight || src.height;
+    if (this.tw !== tw || this.th !== th) {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
+      this.tw = tw; this.th = th;
+    } else {
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, src); // lebih cepat dari realokasi
+    }
     if (mip) {
       gl.generateMipmap(gl.TEXTURE_2D);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
@@ -615,13 +616,13 @@ const S = {
   img: null, // ImageBitmap/Image saat mode image
   facing: 'environment',
   isFront: false,
-  camRes: 'max',
+  camRes: 'fhd', // pratinjau 1080p supaya ringan; hasil Ultra HD tetap lewat ekspor / mode sensor
   exportSize: 'uhd',
   format: 'jpeg',
   ratio: 'native',
   mirror: true,
   grid: false,
-  sensor: false,
+  sensor: matchMedia('(pointer:coarse)').matches && 'ImageCapture' in window,
   sound: true,
   timer: 0,
   dirty: true,
@@ -689,8 +690,7 @@ function compose(dst, glc, p) {
     W = w + sb * 2; H = h + bh * 2; ox = sb; oy = bh;
   }
   if (dst.width !== W || dst.height !== H) { dst.width = W; dst.height = H; }
-  const ctx = dst.getContext('2d');
-  ctx.imageSmoothingQuality = 'high';
+  const ctx = dst.getContext('2d', { alpha: false });
   if (p.frame === 'polaroid') {
     ctx.fillStyle = '#f3efe6';
     ctx.fillRect(0, 0, W, H);
@@ -708,59 +708,103 @@ function compose(dst, glc, p) {
     }
   }
   ctx.drawImage(glc, ox, oy, w, h);
-  if (p.pat && PATTERNS[p.pat]) ctx.drawImage(patternLayer(p.pat, w, h), ox, oy);
-  if (p.deco && DECO[p.deco]) {
+  const ov = overlayLayer(p, w, h);
+  if (ov) ctx.drawImage(ov, ox, oy);
+}
+
+// Pola, stiker emoji, dan cap tanggal digambar SEKALI lalu di-cache (tidak digambar ulang tiap frame).
+let ovCache = { key: '', cv: null };
+function overlayLayer(p, w, h) {
+  const hasPat = p.pat && PATTERNS[p.pat], hasDeco = p.deco && DECO[p.deco];
+  if (!hasPat && !hasDeco && !p.date) return null;
+  const d = new Date();
+  const key = `${p.pat}|${p.deco}|${p.date}|${w}|${h}|${d.toDateString()}`;
+  if (ovCache.key === key) return ovCache.cv;
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d');
+  if (hasPat) drawPattern(ctx, p.pat, w, h);
+  if (hasDeco) {
     const set = DECO[p.deco];
     const base = Math.min(w, h) * 0.12;
-    ctx.save();
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     DECO_SPOTS.forEach(([x, y, k, rot], i) => {
       ctx.save();
-      ctx.translate(ox + x * w, oy + y * h);
+      ctx.translate(x * w, y * h);
       ctx.rotate(rot);
       ctx.font = `${Math.round(base * k)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
       ctx.fillText(set[i % set.length], 0, 0);
       ctx.restore();
     });
-    ctx.restore();
   }
   if (p.date) {
-    const d = new Date();
     const pad = (n) => String(n).padStart(2, '0');
     const t = `'${String(d.getFullYear()).slice(2)} ${pad(d.getMonth() + 1)} ${pad(d.getDate())}`;
     const fs = Math.max(12, Math.round(h * 0.036));
-    ctx.save();
     ctx.font = `bold ${fs}px "Courier New", monospace`;
     ctx.textAlign = 'right';
     ctx.textBaseline = 'alphabetic';
     ctx.shadowColor = 'rgba(255,110,0,.85)';
     ctx.shadowBlur = fs * 0.4;
     ctx.fillStyle = '#ff9d2e';
-    ctx.fillText(t, ox + w - fs * 0.9, oy + h - fs * 0.9);
-    ctx.restore();
+    ctx.fillText(t, w - fs * 0.9, h - fs * 0.9);
   }
+  ovCache = { key, cv };
+  return cv;
 }
 
 /* ---------- Loop pratinjau ---------- */
-function frame() {
+// Resolusi pratinjau menyesuaikan diri: turun otomatis kalau perangkat kewalahan.
+const PERF = { max: matchMedia('(pointer:coarse)').matches ? 960 : 1280, last: 0, ema: 16, calm: 0, cool: 0 };
+const PERF_CEIL = PERF.max;
+let newFrame = true;
+const hasRVFC = 'requestVideoFrameCallback' in HTMLVideoElement.prototype;
+if (hasRVFC) {
+  const cb = () => { newFrame = true; video.requestVideoFrameCallback(cb); };
+  video.requestVideoFrameCallback(cb);
+}
+
+function tunePerf(now) {
+  const dt = Math.min(100, now - PERF.last);
+  PERF.last = now;
+  if (document.hidden || dt <= 0 || PERF.cool > now) return;
+  PERF.ema = PERF.ema * 0.92 + dt * 0.08;
+  if (PERF.ema > 36 && PERF.max > 480) {
+    PERF.max = Math.max(480, Math.round(PERF.max * 0.8));
+    PERF.ema = 20; PERF.calm = 0; PERF.cool = now + 1500;
+  } else if (PERF.ema < 19) {
+    if (++PERF.calm > 400 && PERF.max < PERF_CEIL) { // ~6 detik stabil -> naikkan pelan-pelan
+      PERF.max = Math.min(PERF_CEIL, Math.round(PERF.max * 1.15));
+      PERF.calm = 0; PERF.cool = now + 1500;
+    }
+  } else PERF.calm = 0;
+}
+
+function frame(now) {
   requestAnimationFrame(frame);
   if (!glOK) return;
+  tunePerf(now);
   let src = null;
   if (S.mode === 'camera') {
-    if (video.readyState >= 2 && video.videoWidth) src = video;
+    if (video.readyState >= 2 && video.videoWidth) {
+      if (hasRVFC && !newFrame && !S.dirty) return; // tidak ada frame baru -> jangan render ulang
+      src = video;
+    }
   } else if (S.img && S.dirty) {
     src = S.img;
   }
   if (!src) return;
+  newFrame = false;
   S.dirty = false;
   const [sw, sh] = srcSize();
   const { rect, pw, ph } = cropInfo(sw, sh);
-  const sc = Math.min(1, 1280 / Math.max(pw, ph));
+  const sc = Math.min(1, PERF.max / Math.max(pw, ph));
   const w = Math.max(2, Math.round(pw * sc)), h = Math.max(2, Math.round(ph * sc));
   const mirror = S.mode === 'camera' && S.isFront && S.mirror;
   try {
-    previewR.draw(src, rect, w, h, S.params, mirror, sw > w * 1.6);
+    // mipmap hanya untuk foto diam; untuk video terlalu mahal tiap frame
+    previewR.draw(src, rect, w, h, S.params, mirror, S.mode === 'image' && sw > w * 1.6);
     compose(view, previewR.canvas, S.params);
   } catch (e) { console.error(e); }
 }
@@ -919,6 +963,8 @@ async function capture() {
     const f = $('#flash');
     f.classList.remove('go'); void f.offsetWidth; f.classList.add('go');
     shutterSound();
+    toast('Memproses foto…');
+    await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0))); // beri waktu UI tampil sebelum kerja berat
     const source = await grabSource();
     const out = renderExport(source);
     const mime = S.format === 'png' ? 'image/png' : 'image/jpeg';
@@ -927,7 +973,7 @@ async function capture() {
     addShot(blob, out.width, out.height);
     if (source.src && source.src.close && source.src !== S.img) source.src.close();
     out.width = out.height = 0;
-    patCache = { key: '', cv: null }; // lepas memori layer pola ukuran besar
+    ovCache = { key: '', cv: null }; // lepas memori layer ukuran besar
     toast('Foto tersimpan — tap galeri untuk unduh');
   } catch (e) {
     console.error(e);
