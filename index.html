@@ -70,12 +70,12 @@
     </label>
     <label>Ukuran hasil foto
       <select id="setExport">
-        <option value="uhd">Ultra HD — sisi panjang 3840 px</option>
+        <option value="uhd">Ultra HD — sisi panjang 3840 px (maks. 2× dari sumber)</option>
         <option value="orig">Asli (resolusi sumber)</option>
         <option value="fhd">Full HD — sisi panjang 1920 px</option>
       </select>
     </label>
-    <p class="hint">Ultra HD akan di-upscale halus jika sumber lebih kecil dari 4K.</p>
+    <p class="hint">Foto tidak diperbesar lebih dari 2× dari resolusi sumber supaya tidak pecah. Untuk hasil 4K sungguhan, aktifkan Mode sensor penuh.</p>
     <label>Format file
       <select id="setFormat">
         <option value="jpeg">JPEG (ringan, kualitas 95%)</option>
@@ -104,7 +104,7 @@
     <label class="check"><input type="checkbox" id="setDate"> Cap tanggal ala digicam</label>
     <label class="check"><input type="checkbox" id="setMirror"> Cerminkan kamera depan</label>
     <label class="check"><input type="checkbox" id="setGrid"> Garis bantu (grid)</label>
-    <label class="check"><input type="checkbox" id="setSensor"> Mode sensor penuh <small>(foto resolusi tertinggi bila didukung; framing bisa sedikit beda dari pratinjau)</small></label>
+    <label class="check"><input type="checkbox" id="setSensor"> Mode sensor penuh <small>(saat jepret, kamera naik sebentar ke resolusi tertinggi; pratinjau bisa berkedip sesaat)</small></label>
     <label class="check"><input type="checkbox" id="setSound" checked> Suara rana</label>
   </div>
 </aside>

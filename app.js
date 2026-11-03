@@ -326,7 +326,7 @@ uniform float uExposure, uContrast, uSat, uTemp, uTint, uFade, uBw, uGrain, uVig
               uSharp, uBloom, uAb, uLeak, uToneAmt, uSoft;
 uniform vec3 uShadow, uHigh, uDuoA, uDuoB;
 uniform float uBulge, uSwirl, uPixel, uKaleido, uPoster, uEdge, uNeon, uGlitch, uThermal,
-              uHalf, uMfx, uWobble, uDuo, uInvert, uScan, uClock, uLite; // uLite=1: pratinjau ringan
+              uHalf, uMfx, uWobble, uDuo, uInvert, uScan, uClock, uLite, uHQ; // uLite=1: pratinjau ringan; uHQ=1: perbesar dengan bicubic
 in vec2 vUv;
 out vec4 o;
 
@@ -380,12 +380,38 @@ vec2 warp(vec2 uv){
   return clamp(p, 0.0, 1.0);
 }
 
-vec3 tex(vec2 uv){
+vec2 srcUv(vec2 uv){
   uv = warp(uv);
   float x = mix(uv.x, 1.0 - uv.x, uMirror);
-  vec2 s = vec2(uRect.x + x * uRect.z, uRect.y + (1.0 - uv.y) * uRect.w);
-  return texture(uTex, s).rgb;
+  return vec2(uRect.x + x * uRect.z, uRect.y + (1.0 - uv.y) * uRect.w);
 }
+vec3 tex(vec2 uv){ return texture(uTex, srcUv(uv)).rgb; }
+
+// Catmull-Rom 9 sampel: perbesaran mulus & tajam, tanpa blok-blok kasar
+vec3 texCR(vec2 s){
+  vec2 tsz = vec2(textureSize(uTex, 0));
+  vec2 pos = s * tsz;
+  vec2 c = floor(pos - 0.5) + 0.5;
+  vec2 f = pos - c;
+  vec2 w0 = f * (-0.5 + f * (1.0 - 0.5 * f));
+  vec2 w1 = 1.0 + f * f * (-2.5 + 1.5 * f);
+  vec2 w2 = f * (0.5 + f * (2.0 - 1.5 * f));
+  vec2 w3 = f * f * (-0.5 + 0.5 * f);
+  vec2 w12 = w1 + w2;
+  vec2 t0 = (c - 1.0) / tsz, t3 = (c + 2.0) / tsz, t12 = (c + w2 / w12) / tsz;
+  vec3 r = vec3(0.0);
+  r += texture(uTex, vec2(t0.x,  t0.y )).rgb * w0.x  * w0.y;
+  r += texture(uTex, vec2(t12.x, t0.y )).rgb * w12.x * w0.y;
+  r += texture(uTex, vec2(t3.x,  t0.y )).rgb * w3.x  * w0.y;
+  r += texture(uTex, vec2(t0.x,  t12.y)).rgb * w0.x  * w12.y;
+  r += texture(uTex, vec2(t12.x, t12.y)).rgb * w12.x * w12.y;
+  r += texture(uTex, vec2(t3.x,  t12.y)).rgb * w3.x  * w12.y;
+  r += texture(uTex, vec2(t0.x,  t3.y )).rgb * w0.x  * w3.y;
+  r += texture(uTex, vec2(t12.x, t3.y )).rgb * w12.x * w3.y;
+  r += texture(uTex, vec2(t3.x,  t3.y )).rgb * w3.x  * w3.y;
+  return max(r, 0.0);
+}
+vec3 texHQ(vec2 uv){ return uHQ > 0.5 ? texCR(srcUv(uv)) : tex(uv); }
 float lumAt(vec2 uv){ return dot(tex(uv), LUM); }
 
 void main(){
@@ -393,9 +419,9 @@ void main(){
   vec3 col;
   if (uAb > 0.0 || uGlitch > 0.0) {
     vec2 off = c * uAb * 0.012 + vec2(uGlitch * 0.006, 0.0);
-    col = vec3(tex(vUv + off).r, tex(vUv).g, tex(vUv - off).b);
+    col = vec3(texHQ(vUv + off).r, texHQ(vUv).g, texHQ(vUv - off).b);
   } else {
-    col = tex(vUv);
+    col = texHQ(vUv);
   }
 
   // sharpen / soft
@@ -407,7 +433,7 @@ void main(){
       blur = (tex(vUv + vec2(uPx.x, 0.0)) + tex(vUv - vec2(uPx.x, 0.0))
             + tex(vUv + vec2(0.0, uPx.y)) + tex(vUv - vec2(0.0, uPx.y))) * 0.25;
     }
-    col += (col - blur) * uSharp * 1.6;
+    col += (col - blur) * uSharp * (uHQ > 0.5 ? 0.8 : 1.6);
   }
   if (uSoft > 0.0) {
     int n = uLite > 0.5 ? 3 : 6;
@@ -602,6 +628,7 @@ class Renderer {
     for (const k in UNIFORMS) gl.uniform1f(this.u(UNIFORMS[k]), p[k]);
     gl.uniform1f(this.u('uClock'), (performance.now() / 1000) % 1000);
     gl.uniform1f(this.u('uLite'), this.lite ? 1 : 0);
+    gl.uniform1f(this.u('uHQ'), this.hq ? 1 : 0);
     gl.uniform3fv(this.u('uDuoA'), p.duoA);
     gl.uniform3fv(this.u('uDuoB'), p.duoB);
     gl.uniform3fv(this.u('uShadow'), p.shadow);
@@ -925,28 +952,64 @@ function countdown(n) {
   });
 }
 
+// potong tengah supaya framing sama dengan pratinjau
+async function cropToAspect(bmp, vr) {
+  const br = bmp.width / bmp.height;
+  if (!vr || Math.abs(vr - br) / vr <= 0.01) return bmp;
+  let cw = bmp.width, ch = bmp.height;
+  if (br > vr) cw = Math.round(bmp.height * vr); else ch = Math.round(bmp.width / vr);
+  const out = await createImageBitmap(bmp, Math.round((bmp.width - cw) / 2), Math.round((bmp.height - ch) / 2), cw, ch);
+  bmp.close();
+  return out;
+}
+
+// minta kamera naik ke resolusi tinggi sesaat, ambil frame, lalu kembalikan ke resolusi pratinjau
+async function burstHiRes(vr) {
+  const before = video.videoWidth * video.videoHeight;
+  const caps = (track.getCapabilities && track.getCapabilities()) || {};
+  const L = Math.min(4096, Math.max((caps.width && caps.width.max) || 0, (caps.height && caps.height.max) || 0) || 3840);
+  const want = vr < 1 ? { width: { ideal: Math.round(L * vr) }, height: { ideal: L } }
+                      : { width: { ideal: L }, height: { ideal: Math.round(L / vr) } };
+  const [rw, rh] = RES[S.camRes] || RES.fhd;
+  try {
+    await track.applyConstraints({ ...want, aspectRatio: { ideal: vr } });
+    await new Promise((res) => {
+      const t0 = performance.now();
+      const chk = () => {
+        if (video.videoWidth * video.videoHeight > before * 1.3 && video.readyState >= 2) { setTimeout(res, 300); return; }
+        if (performance.now() - t0 > 1800) { res(); return; }
+        setTimeout(chk, 80);
+      };
+      chk();
+    });
+    if (video.videoWidth * video.videoHeight > before * 1.3) return await createImageBitmap(video);
+    return null;
+  } finally {
+    try { await track.applyConstraints({ width: { ideal: rw, max: 2560 }, height: { ideal: rh, max: 2560 } }); } catch (e) { /* abaikan */ }
+  }
+}
+
 async function grabSource() {
   if (S.mode === 'image') return { src: S.img, sw: S.img.width, sh: S.img.height, mirror: false };
   const mirror = S.isFront && S.mirror;
-  if (S.sensor && track && 'ImageCapture' in window) {
-    try {
-      const ic = new ImageCapture(track);
-      const caps = await ic.getPhotoCapabilities();
-      const opt = {};
-      if (caps.imageWidth && caps.imageHeight) { opt.imageWidth = caps.imageWidth.max; opt.imageHeight = caps.imageHeight.max; }
-      const blob = await ic.takePhoto(opt);
-      let bmp = await createImageBitmap(blob);
-      // samakan framing dengan pratinjau: potong tengah sesuai rasio video
-      const vr = video.videoWidth / video.videoHeight, br = bmp.width / bmp.height;
-      if (vr && Math.abs(vr - br) / vr > 0.01) {
-        let cw = bmp.width, ch = bmp.height;
-        if (br > vr) cw = Math.round(bmp.height * vr); else ch = Math.round(bmp.width / vr);
-        const cropped = await createImageBitmap(bmp, Math.round((bmp.width - cw) / 2), Math.round((bmp.height - ch) / 2), cw, ch);
-        bmp.close();
-        bmp = cropped;
-      }
-      return { src: bmp, sw: bmp.width, sh: bmp.height, mirror };
-    } catch (e) { /* jatuh ke frame video */ }
+  const vr = video.videoWidth / video.videoHeight;
+  if (S.sensor && track) {
+    if ('ImageCapture' in window) {
+      try {
+        const ic = new ImageCapture(track);
+        const caps = await ic.getPhotoCapabilities();
+        const opt = {};
+        if (caps.imageWidth && caps.imageHeight) { opt.imageWidth = caps.imageWidth.max; opt.imageHeight = caps.imageHeight.max; }
+        const bmp = await cropToAspect(await createImageBitmap(await ic.takePhoto(opt)), vr);
+        return { src: bmp, sw: bmp.width, sh: bmp.height, mirror };
+      } catch (e) { /* coba cara lain */ }
+    }
+    if (video.videoWidth * video.videoHeight < 5e6) {
+      try {
+        const hi = await burstHiRes(vr);
+        if (hi) { const bmp = await cropToAspect(hi, vr); return { src: bmp, sw: bmp.width, sh: bmp.height, mirror }; }
+      } catch (e) { /* pakai frame pratinjau */ }
+    }
   }
   const sw = video.videoWidth, sh = video.videoHeight;
   let src = video;
@@ -960,6 +1023,8 @@ function renderExport({ src, sw, sh, mirror }) {
   let scale = 1;
   if (S.exportSize === 'uhd') scale = 3840 / Math.max(pw, ph);
   else if (S.exportSize === 'fhd') scale = 1920 / Math.max(pw, ph);
+  scale = Math.min(scale, 2); // jangan memperbesar lebih dari 2x: piksel palsu hanya bikin pecah
+  exportR.hq = scale > 1.02;
   let w = pw * scale, h = ph * scale;
   const maxSide = Math.min(exportR.maxSize, 8192), maxArea = 16e6;
   const k = Math.min(1, maxSide / Math.max(w, h), Math.sqrt(maxArea / (w * h)));
@@ -988,11 +1053,12 @@ async function capture() {
     const mime = S.format === 'png' ? 'image/png' : 'image/jpeg';
     const blob = await new Promise((r) => out.toBlob(r, mime, 0.95));
     if (!blob) throw new Error('Gagal membuat file');
-    addShot(blob, out.width, out.height);
+    const rw = out.width, rh = out.height;
+    addShot(blob, rw, rh);
     if (source.src && source.src.close && source.src !== S.img) source.src.close();
     out.width = out.height = 0;
     ovCache = { key: '', cv: null }; // lepas memori layer ukuran besar
-    toast('Foto tersimpan — tap galeri untuk unduh');
+    toast(`Tersimpan ${rw}×${rh} (sumber ${source.sw}×${source.sh}) — tap galeri untuk unduh`);
   } catch (e) {
     console.error(e);
     toast('Gagal mengambil foto: ' + (e.message || e));
