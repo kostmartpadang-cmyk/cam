@@ -68,14 +68,14 @@
         <option value="max">Maksimum otomatis (paling berat)</option>
       </select>
     </label>
-    <label>Ukuran hasil foto
+    <label>Ukuran saat diunduh
       <select id="setExport">
-        <option value="orig">Asli — resolusi kamera (paling cepat)</option>
-        <option value="uhd">Ultra HD — sisi panjang 3840 px (lebih lambat)</option>
+        <option value="uhd">Ultra HD — sisi panjang 3840 px</option>
+        <option value="orig">Resolusi penuh kamera</option>
         <option value="fhd">Full HD — sisi panjang 1920 px</option>
       </select>
     </label>
-    <p class="hint">Foto tidak diperbesar lebih dari 2× dari resolusi sumber supaya tidak pecah. Untuk hasil 4K sungguhan, aktifkan Mode sensor penuh.</p>
+    <p class="hint">Foto di galeri disimpan ringan supaya cepat. Ukuran ini baru dibuat saat kamu menekan Unduh atau Bagikan (ada loading). Foto tidak diperbesar lebih dari 2× dari sumber supaya tidak pecah.</p>
     <label>Format file
       <select id="setFormat">
         <option value="jpeg">JPEG (ringan, kualitas 95%)</option>
@@ -125,6 +125,7 @@
   </div>
 </div>
 
+<div id="loading" hidden role="status" aria-live="polite"><div class="spin"></div><span id="loadingText">Memproses…</span></div>
 <div id="toast"></div>
 <script src="app.js"></script>
 </body>

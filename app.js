@@ -646,7 +646,7 @@ const S = {
   facing: 'environment',
   isFront: false,
   camRes: 'fhd', // pratinjau 1080p supaya ringan; hasil Ultra HD tetap lewat ekspor / mode sensor
-  exportSize: 'orig', // cepat; pilih Ultra HD di Pengaturan bila mau ukuran lebih besar
+  exportSize: 'uhd', // ukuran saat DIUNDUH/DIBAGIKAN; foto di galeri sengaja ringan
   format: 'jpeg',
   ratio: 'native',
   mirror: true,
@@ -659,11 +659,11 @@ const S = {
 };
 const SAVED_KEYS = ['camRes', 'exportSize', 'format', 'ratio', 'mirror', 'grid', 'sensor', 'sound', 'facing', 'eco'];
 try {
-  const sv = JSON.parse(localStorage.getItem('camawa3') || '{}');
+  const sv = JSON.parse(localStorage.getItem('camawa4') || '{}');
   SAVED_KEYS.forEach((k) => { if (k in sv) S[k] = sv[k]; });
 } catch (e) { /* abaikan */ }
 const saveSettings = () => {
-  try { localStorage.setItem('camawa3', JSON.stringify(Object.fromEntries(SAVED_KEYS.map((k) => [k, S[k]])))); } catch (e) { /* abaikan */ }
+  try { localStorage.setItem('camawa4', JSON.stringify(Object.fromEntries(SAVED_KEYS.map((k) => [k, S[k]])))); } catch (e) { /* abaikan */ }
 };
 
 const view = $('#view');
@@ -1051,7 +1051,8 @@ function renderExport({ src, sw, sh, mirror, params, ratio, exportSize }) {
   if (!exportR) exportR = new Renderer(document.createElement('canvas'));
   const { rect, pw, ph } = cropInfo(sw, sh, ratio);
   let scale = 1;
-  if (exportSize === 'uhd') scale = 3840 / Math.max(pw, ph);
+  if (exportSize === 'gallery') scale = Math.min(1, 1920 / Math.max(pw, ph));
+  else if (exportSize === 'uhd') scale = 3840 / Math.max(pw, ph);
   else if (exportSize === 'fhd') scale = 1920 / Math.max(pw, ph);
   scale = Math.min(scale, 2); // jangan memperbesar lebih dari 2x: piksel palsu hanya bikin pecah
   exportR.hq = scale > 1.02;
@@ -1072,28 +1073,41 @@ let busy = false;
 let exportChain = Promise.resolve();
 let pendingSaves = 0;
 
+// Render satu foto jadi file. toBlob dipanggil di task yang sama dengan render WebGL (tanpa await di antaranya).
+async function renderToBlob(shot) {
+  await new Promise((r) => setTimeout(r, 0)); // beri napas ke UI
+  const out = renderExport(shot);
+  const w = out.width, h = out.height;
+  const mime = shot.format === 'png' ? 'image/png' : 'image/jpeg';
+  const blob = await new Promise((r) => out.toBlob(r, mime, 0.92));
+  if (!blob) throw new Error('Gagal membuat file');
+  if (out !== exportR.canvas) out.width = out.height = 0;
+  exportR.canvas.width = exportR.canvas.height = 1; // lepas memori GPU ukuran besar
+  ovCache = { key: '', cv: null };
+  return { blob, w, h };
+}
+
+const SIZE_LABEL = { uhd: 'Ultra HD', fhd: 'Full HD', orig: 'resolusi penuh' };
+
+// Foto galeri dibuat ringan (cepat). Sumber aslinya disimpan supaya Ultra HD bisa dibuat saat diunduh.
 async function saveShot(shot) {
+  let keep = null;
   try {
-    await new Promise((r) => setTimeout(r, 0)); // beri napas ke UI
-    const out = renderExport(shot);
-    const rw = out.width, rh = out.height;
-    const mime = shot.format === 'png' ? 'image/png' : 'image/jpeg';
-    // toBlob harus dipanggil di task yang sama dengan render WebGL (tanpa await di antaranya)
-    const blob = await new Promise((r) => out.toBlob(r, mime, 0.92));
-    if (!blob) throw new Error('Gagal membuat file');
-    addShot(blob, rw, rh);
-    if (out !== exportR.canvas) out.width = out.height = 0;
-    exportR.canvas.width = exportR.canvas.height = 1; // lepas memori GPU ukuran besar
-    ovCache = { key: '', cv: null };
+    const r = await renderToBlob({ ...shot, exportSize: 'gallery' });
+    if (typeof ImageBitmap !== 'undefined' && shot.src instanceof ImageBitmap) {
+      keep = { src: shot.src, sw: shot.sw, sh: shot.sh, mirror: shot.mirror, params: shot.params,
+               ratio: shot.ratio, format: shot.format, own: shot.src !== S.img };
+    }
+    addShot(r.blob, r.w, r.h, keep);
     pendingSaves--;
     if (pendingSaves > 0) toast('Tersimpan • ' + pendingSaves + ' lagi diproses…');
-    else toast('Tersimpan ' + rw + '×' + rh + ' — tap galeri untuk unduh');
+    else toast('Tersimpan — ' + SIZE_LABEL[S.exportSize] + ' dibuat saat diunduh');
   } catch (e) {
     pendingSaves--;
     console.error(e);
     toast('Gagal menyimpan foto: ' + (e.message || e));
   } finally {
-    if (shot.src && shot.src.close && shot.src !== S.img) shot.src.close();
+    if (!keep && shot.src && shot.src.close && shot.src !== S.img) shot.src.close();
   }
 }
 
@@ -1131,9 +1145,19 @@ function stamp() {
   const d = new Date(), p = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
 }
-function addShot(blob, w, h) {
+function releaseSource(s) {
+  if (s.source) {
+    if (s.source.own) { try { s.source.src.close(); } catch (e) { /* abaikan */ } }
+    s.source = null;
+  }
+  s.hd = null;
+}
+function addShot(blob, w, h, source) {
   const ext = blob.type === 'image/png' ? 'png' : 'jpg';
-  shots.push({ blob, w, h, url: URL.createObjectURL(blob), name: `cam-awa-${stamp()}.${ext}` });
+  shots.push({ blob, w, h, source, hd: null, url: URL.createObjectURL(blob), name: `cam-awa-${stamp()}.${ext}` });
+  // simpan sumber hanya untuk 8 foto terakhir agar memori tidak bengkak
+  const withSrc = shots.filter((x) => x.source);
+  while (withSrc.length > 8) releaseSource(withSrc.shift());
   refreshThumb();
 }
 function refreshThumb() {
@@ -1154,6 +1178,53 @@ function download(s) {
   const a = document.createElement('a');
   a.href = s.url; a.download = s.name;
   document.body.appendChild(a); a.click(); a.remove();
+}
+
+function showLoading(text) { $('#loadingText').textContent = text; $('#loading').hidden = false; }
+function hideLoading() { $('#loading').hidden = true; }
+
+// File untuk diunduh: dirender ulang dari sumber asli dengan ukuran pilihan (Ultra HD dst).
+async function hdBlobFor(s) {
+  const target = S.exportSize;
+  if (!s.source) return { blob: s.blob, w: s.w, h: s.h, url: s.url, target };
+  if (s.hd && s.hd.target === target) return s.hd;
+  const r = await new Promise((resolve, reject) => {
+    exportChain = exportChain.then(async () => {
+      try { resolve(await renderToBlob({ ...s.source, exportSize: target })); } catch (e) { reject(e); }
+    });
+  });
+  s.hd = { ...r, target };
+  return s.hd;
+}
+
+let dlBusy = false;
+async function exportCurrent(mode) {
+  if (dlBusy) return;
+  const s = shots[viewIdx];
+  if (!s) return;
+  dlBusy = true;
+  showLoading(s.source ? 'Menyiapkan foto ' + SIZE_LABEL[S.exportSize] + '…' : 'Menyiapkan foto…');
+  try {
+    await new Promise((r) => setTimeout(r, 60)); // biarkan layar loading tampil dulu
+    const r = await hdBlobFor(s);
+    if (mode === 'share') {
+      const file = new File([r.blob], s.name, { type: r.blob.type });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try { await navigator.share({ files: [file], title: 'Cam-Awa' }); } catch (e) { /* dibatalkan */ }
+      } else toast('Berbagi tidak didukung, gunakan Unduh');
+    } else {
+      const url = r.url || URL.createObjectURL(r.blob);
+      download({ url, name: s.name });
+      if (!r.url) setTimeout(() => URL.revokeObjectURL(url), 15000);
+      toast('Diunduh ' + r.w + '×' + r.h + (s.source ? '' : ' (sumber asli sudah dilepas)'));
+    }
+  } catch (e) {
+    console.error(e);
+    toast('Gagal menyiapkan foto: ' + (e.message || e));
+  } finally {
+    hideLoading();
+    dlBusy = false;
+  }
 }
 
 /* ---------- UI ---------- */
@@ -1285,16 +1356,11 @@ function buildUI() {
   $('#btnGallery').onclick = () => openViewer(shots.length - 1);
   $('#vPrev').onclick = () => openViewer(viewIdx - 1);
   $('#vNext').onclick = () => openViewer(viewIdx + 1);
-  $('#vDownload').onclick = () => download(shots[viewIdx]);
-  $('#vShare').onclick = async () => {
-    const s = shots[viewIdx];
-    const file = new File([s.blob], s.name, { type: s.blob.type });
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      try { await navigator.share({ files: [file], title: 'Cam-Awa' }); } catch (e) { /* dibatalkan */ }
-    } else toast('Berbagi tidak didukung, gunakan Unduh');
-  };
+  $('#vDownload').onclick = () => exportCurrent('download');
+  $('#vShare').onclick = () => exportCurrent('share');
   $('#vDelete').onclick = () => {
     const s = shots.splice(viewIdx, 1)[0];
+    releaseSource(s);
     URL.revokeObjectURL(s.url);
     refreshThumb();
     if (!shots.length) $('#viewer').hidden = true; else openViewer(Math.min(viewIdx, shots.length - 1));
