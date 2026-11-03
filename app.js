@@ -654,6 +654,7 @@ const S = {
   grid: false,
   sensor: false, // kualitas maksimal (lebih lambat) — opsional di Pengaturan
   eco: matchMedia('(pointer:coarse)').matches, // mode hemat: pratinjau 720 px, 24 fps
+  autoSave: true, // otomatis unduh ke HP setelah jepret
   date: true, // cap tanggal pada foto (bisa dimatikan langsung di layar kamera)
   dateStyle: 'minimal',
   imgDate: 0,
@@ -661,7 +662,7 @@ const S = {
   timer: 0,
   dirty: true,
 };
-const SAVED_KEYS = ['camRes', 'exportSize', 'format', 'ratio', 'mirror', 'grid', 'sensor', 'sound', 'facing', 'eco', 'date', 'dateStyle'];
+const SAVED_KEYS = ['camRes', 'exportSize', 'format', 'ratio', 'mirror', 'grid', 'sensor', 'sound', 'facing', 'eco', 'date', 'dateStyle', 'autoSave'];
 try {
   const sv = JSON.parse(localStorage.getItem('camawa4') || '{}');
   SAVED_KEYS.forEach((k) => { if (k in sv) S[k] = sv[k]; });
@@ -1178,10 +1179,15 @@ async function saveShot(shot) {
                ratio: shot.ratio, format: shot.format, own: shot.src !== S.img };
     }
     addShot(r.blob, r.w, r.h, keep);
-    queueHD(shots[shots.length - 1]);
+    const added = shots[shots.length - 1];
+    if (S.autoSave) {
+      if (keep) { added.auto = true; autoPending++; updateSaving(); } // Ultra HD disiapkan lalu diunduh otomatis
+      else { saveToDevice(added, { blob: added.blob, url: added.url }); } // tanpa sumber: unduh versi galeri
+    }
+    queueHD(added);
     pendingSaves--;
     if (pendingSaves > 0) toast('Tersimpan • ' + pendingSaves + ' lagi diproses…');
-    else toast('Tersimpan — ' + SIZE_LABEL[S.exportSize] + ' dibuat saat diunduh');
+    else if (!S.autoSave) toast('Tersimpan — ' + SIZE_LABEL[S.exportSize] + ' dibuat saat diunduh');
   } catch (e) {
     pendingSaves--;
     console.error(e);
@@ -1262,6 +1268,20 @@ function download(s) {
   document.body.appendChild(a); a.click(); a.remove();
 }
 
+function saveToDevice(s, r) {
+  const url = r.url || URL.createObjectURL(r.blob);
+  download({ url, name: s.name });
+  if (!r.url) setTimeout(() => URL.revokeObjectURL(url), 20000);
+  s.saved = true;
+}
+
+// indikator kecil (tidak memblokir) saat foto sedang disiapkan & diunduh otomatis
+let autoPending = 0;
+function updateSaving() {
+  $('#saving').hidden = autoPending <= 0;
+  $('#savingText').textContent = 'Menyimpan ke HP…' + (autoPending > 1 ? ' (' + autoPending + ')' : '');
+}
+
 function showLoading(text) { $('#loadingText').textContent = text; $('#loading').hidden = false; }
 function hideLoading() { $('#loading').hidden = true; }
 
@@ -1300,10 +1320,22 @@ async function pumpHD() {
     while (hdQueue.length) {
       if (pendingSaves > 0 || busy || dlBusy) { await sleep(400); continue; }
       const sh = hdQueue.shift();
-      if (!sh.source || !shots.includes(sh)) continue;
-      await sleep(300); // beri ruang untuk UI dan jepretan berikutnya
+      if (!sh.source || !shots.includes(sh)) {
+        if (sh.auto) { autoPending = Math.max(0, autoPending - 1); updateSaving(); }
+        continue;
+      }
+      await sleep(sh.auto ? 100 : 300); // beri ruang untuk UI dan jepretan berikutnya
       if (pendingSaves > 0 || busy) { hdQueue.unshift(sh); continue; }
-      try { await hdBlobFor(sh); } catch (e) { /* diulang saat diunduh */ }
+      try {
+        const r = await hdBlobFor(sh);
+        if (sh.auto) {
+          saveToDevice(sh, r);
+          autoPending = Math.max(0, autoPending - 1); updateSaving();
+          toast(autoPending > 0 ? 'Tersimpan di HP • ' + autoPending + ' lagi…' : 'Tersimpan di HP ' + r.w + '×' + r.h);
+        }
+      } catch (e) {
+        if (sh.auto) { autoPending = Math.max(0, autoPending - 1); updateSaving(); toast('Gagal menyimpan otomatis — buka galeri lalu tekan Unduh'); }
+      }
     }
   } finally { hdRunning = false; }
 }
@@ -1324,9 +1356,7 @@ async function exportCurrent(mode) {
         try { await navigator.share({ files: [file], title: 'Cam-Awa' }); } catch (e) { /* dibatalkan */ }
       } else toast('Berbagi tidak didukung, gunakan Unduh');
     } else {
-      const url = r.url || URL.createObjectURL(r.blob);
-      download({ url, name: s.name });
-      if (!r.url) setTimeout(() => URL.revokeObjectURL(url), 15000);
+      saveToDevice(s, r);
       toast('Diunduh ' + r.w + '×' + r.h + (s.source ? '' : ' (sumber asli sudah dilepas)'));
     }
   } catch (e) {
@@ -1439,6 +1469,8 @@ function buildUI() {
   $('#setGrid').addEventListener('change', () => $('#grid').classList.toggle('on', S.grid));
   $('#grid').classList.toggle('on', S.grid);
   $('#setDate').onchange = (e) => setDate(e.target.checked);
+  $('#setAuto').checked = S.autoSave;
+  $('#setAuto').onchange = (e) => { S.autoSave = e.target.checked; saveSettings(); toast(S.autoSave ? 'Foto otomatis terunduh ke HP' : 'Foto tidak diunduh otomatis'); };
   $('#setDateStyle').onchange = (e) => setDateStyle(e.target.value);
   $('#btnDate').onclick = () => setDate(!S.date);
   $('#btnDateStyle').onclick = () => {

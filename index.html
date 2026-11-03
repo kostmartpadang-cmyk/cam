@@ -104,6 +104,7 @@
         <option value="film">Roll film</option>
       </select>
     </label>
+    <label class="check"><input type="checkbox" id="setAuto"> Simpan otomatis ke HP setelah jepret <small>(file langsung terunduh tanpa menekan Unduh; browser mungkin meminta izin "unduh beberapa file" sekali)</small></label>
     <label class="check"><input type="checkbox" id="setEco"> Mode hemat <small>(pratinjau lebih kecil &amp; 24 fps agar lancar; hasil foto tetap kualitas penuh)</small></label>
     <label class="check"><input type="checkbox" id="setDate"> Sertakan tanggal di foto</label>
     <label>Gaya tanggal
@@ -139,6 +140,7 @@
   </div>
 </div>
 
+<div id="saving" hidden role="status"><div class="spin sm"></div><span id="savingText"></span></div>
 <div id="loading" hidden role="status" aria-live="polite"><div class="spin"></div><span id="loadingText">Memproses…</span></div>
 <div id="toast"></div>
 <script src="app.js"></script>

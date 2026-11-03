@@ -140,3 +140,9 @@ input[type=range]{width:100%;accent-color:var(--accent);height:24px}
   background:rgba(0,0,0,.55);backdrop-filter:blur(6px);color:var(--text)}
 .pill .i{width:15px;height:15px}
 .pill.on{background:var(--accent);color:var(--accent-ink);font-weight:600}
+
+/* indikator simpan otomatis (tidak memblokir) */
+#saving{position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 64px);transform:translateX(-50%);z-index:40;
+  display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:999px;font-size:13px;
+  background:rgba(0,0,0,.72);backdrop-filter:blur(6px);color:var(--text);pointer-events:none}
+.spin.sm{width:16px;height:16px;border-width:2px}
