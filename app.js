@@ -24,54 +24,52 @@ document.querySelectorAll('svg[data-i]').forEach((el) => {
 
 /* ---------- Preset filter ---------- */
 const BASE = {
-  exposure: 0, contrast: 1, sat: 1, temp: 0, tint: 0, fade: 0, bw: 0, grain: 0, vig: 0,
-  sharp: 0.15, bloom: 0, ab: 0, leak: 0, soft: 0, toneAmt: 0,
+  exposure: 0, contrast: 1, sat: 1, temp: 0, tint: 0, fade: 0, bw: 0, vig: 0,
+  sharp: 0.15, leak: 0, toneAmt: 0,
   shadow: [0.5, 0.5, 0.5], high: [0.5, 0.5, 0.5], date: false, frame: 'none',
   // efek khusus / lucu
-  bulge: 0, swirl: 0, pixel: 0, kaleido: 0, poster: 0, edge: 0, neon: 0, glitch: 0, thermal: 0,
-  half: 0, mfx: 0, wobble: 0, duo: 0, invert: 0, scan: 0,
+  bulge: 0, swirl: 0, pixel: 0, poster: 0, thermal: 0,
+  mfx: 0, duo: 0, invert: 0, scan: 0,
   duoA: [0, 0, 0], duoB: [1, 1, 1], deco: '', pat: '',
 };
 const PRESETS = [
   { name: 'Asli', sw: ['#d9d4cc', '#7d776e'], p: {} },
   { name: 'Kodak Gold', sw: ['#ffd36a', '#c4651f'], p: {
-      contrast: 1.1, sat: 1.22, temp: 0.5, fade: 0.08, grain: 0.22, vig: 0.22, sharp: 0.4,
+      contrast: 1.1, sat: 1.22, temp: 0.5, fade: 0.08, vig: 0.22, sharp: 0.4,
       toneAmt: 0.6, shadow: [0.5, 0.48, 0.45], high: [0.66, 0.55, 0.38] } },
   { name: 'Fuji Hijau', sw: ['#9ad6b0', '#2e6f5c'], p: {
-      contrast: 1.12, sat: 1.12, temp: -0.1, tint: 0.4, fade: 0.06, grain: 0.2, vig: 0.2, sharp: 0.4,
+      contrast: 1.12, sat: 1.12, temp: -0.1, tint: 0.4, fade: 0.06, vig: 0.2, sharp: 0.4,
       toneAmt: 0.6, shadow: [0.4, 0.55, 0.52], high: [0.55, 0.55, 0.5] } },
   { name: 'Sinematik', sw: ['#2f6f7e', '#e49b5a'], p: {
-      contrast: 1.2, sat: 1.1, fade: 0.04, grain: 0.1, vig: 0.38, sharp: 0.45,
+      contrast: 1.2, sat: 1.1, fade: 0.04, vig: 0.38, sharp: 0.45,
       toneAmt: 1.0, shadow: [0.36, 0.52, 0.62], high: [0.66, 0.5, 0.36] } },
   { name: 'Hitam Putih', sw: ['#eeeeee', '#2a2a2a'], p: {
-      contrast: 1.3, bw: 1, fade: 0.04, grain: 0.45, vig: 0.3, sharp: 0.5 } },
+      contrast: 1.3, bw: 1, fade: 0.04, vig: 0.3, sharp: 0.5 } },
   { name: 'Sepia', sw: ['#e8cfa5', '#5f3d22'], p: {
-      contrast: 1.12, bw: 1, fade: 0.12, grain: 0.25, vig: 0.4, toneAmt: 1.3, sharp: 0.3,
+      contrast: 1.12, bw: 1, fade: 0.12, vig: 0.4, toneAmt: 1.3, sharp: 0.3,
       shadow: [0.38, 0.3, 0.22], high: [0.7, 0.56, 0.4] } },
   { name: 'Pastel Matte', sw: ['#f6d6e0', '#a9c9e8'], p: {
-      exposure: 0.15, contrast: 0.9, sat: 0.8, temp: 0.1, tint: -0.2, fade: 0.35, grain: 0.08, vig: 0.1, soft: 0.1,
+      exposure: 0.15, contrast: 0.9, sat: 0.8, temp: 0.1, tint: -0.2, fade: 0.35, vig: 0.1, 
       toneAmt: 0.4, shadow: [0.5, 0.48, 0.58], high: [0.6, 0.52, 0.5] } },
   { name: 'Vivid HD', sw: ['#27d17f', '#ff4d6d'], p: {
       contrast: 1.25, sat: 1.4, sharp: 1.0, vig: 0.1 } },
 
   /* ===== Estetik ===== */
   { c: 'Estetik', e: '🌇', name: 'Golden Hour', sw: ['#ffd08a', '#ff7a3d'], p: {
-      exposure: 0.1, contrast: 1.1, sat: 1.2, temp: 0.65, fade: 0.06, vig: 0.2, bloom: 0.4, leak: 0.25, sharp: 0.4,
-      grain: 0.1, toneAmt: 0.7, shadow: [0.48, 0.46, 0.5], high: [0.7, 0.54, 0.36] } },
+      exposure: 0.1, contrast: 1.1, sat: 1.2, temp: 0.65, fade: 0.06, vig: 0.2, leak: 0.25, sharp: 0.4,
+      toneAmt: 0.7, shadow: [0.48, 0.46, 0.5], high: [0.7, 0.54, 0.36] } },
   { c: 'Estetik', e: '🌫️', name: 'Moody', sw: ['#2c3b44', '#8aa0a8'], p: {
-      exposure: -0.25, contrast: 1.3, sat: 0.75, temp: -0.2, fade: 0.12, vig: 0.5, grain: 0.2, sharp: 0.5,
+      exposure: -0.25, contrast: 1.3, sat: 0.75, temp: -0.2, fade: 0.12, vig: 0.5, sharp: 0.5,
       toneAmt: 0.8, shadow: [0.38, 0.5, 0.58], high: [0.55, 0.52, 0.5] } },
   { c: 'Estetik', e: '🎞️', name: 'Noir', sw: ['#f2f2f2', '#000'], p: {
-      contrast: 1.55, bw: 1, vig: 0.65, grain: 0.35, fade: 0.02, sharp: 0.6 } },
+      contrast: 1.55, bw: 1, vig: 0.65, fade: 0.02, sharp: 0.6 } },
   { c: 'Estetik', e: '🌃', name: 'Cyberpunk', sw: ['#ff2bd6', '#17e6ff'], p: {
-      contrast: 1.25, sat: 1.5, bloom: 0.55, ab: 0.5, vig: 0.35, grain: 0.12, sharp: 0.6,
+      contrast: 1.25, sat: 1.5, vig: 0.35, sharp: 0.6,
       toneAmt: 1.6, shadow: [0.62, 0.34, 0.7], high: [0.34, 0.62, 0.7] } },
-  { c: 'Estetik', e: '☁️', name: 'Dreamy', sw: ['#ffe6f2', '#bcd7ff'], p: {
-      exposure: 0.15, soft: 0.35, bloom: 0.75, fade: 0.14, sat: 1.1, temp: 0.1, vig: 0.15, sharp: 0 } },
   { c: 'Estetik', e: '🌴', name: 'Vaporwave', sw: ['#3a1a8a', '#ff8fd0'], p: {
-      duo: 0.8, duoA: [0.16, 0.05, 0.42], duoB: [1, 0.62, 0.92], bloom: 0.4, scan: 0.3, contrast: 1.1, grain: 0.1 } },
+      duo: 0.8, duoA: [0.16, 0.05, 0.42], duoB: [1, 0.62, 0.92], scan: 0.3, contrast: 1.1, } },
   { c: 'Estetik', e: '🟩', name: 'Matrix', sw: ['#031a06', '#4dff5e'], p: {
-      duo: 1, duoA: [0, 0.03, 0], duoB: [0.3, 1, 0.35], scan: 0.6, bloom: 0.45, grain: 0.2, contrast: 1.15 } },
+      duo: 1, duoA: [0, 0.03, 0], duoB: [0.3, 1, 0.35], scan: 0.6, contrast: 1.15 } },
 
   /* ===== Lucu ===== */
   { c: 'Lucu', e: '🐟', name: 'Mata Ikan', sw: ['#9ad4ff', '#1d5fa8'], p: {
@@ -80,56 +78,46 @@ const PRESETS = [
       bulge: -0.8, sharp: 0.4, sat: 1.1 } },
   { c: 'Lucu', e: '🌀', name: 'Pusaran', sw: ['#c9a8ff', '#4a2a9a'], p: {
       swirl: 3.2, sat: 1.15, sharp: 0.3 } },
-  { c: 'Lucu', e: '🔮', name: 'Kaleidoskop', sw: ['#ff7ad9', '#7a7aff'], p: {
-      kaleido: 6, sat: 1.35, sharp: 0.3 } },
   { c: 'Lucu', e: '🪞', name: 'Cermin Kembar', sw: ['#e0e0e0', '#8a8a8a'], p: { mfx: 1 } },
   { c: 'Lucu', e: '🧩', name: 'Cermin 4', sw: ['#ffd36a', '#5aa8ff'], p: { mfx: 3, sat: 1.1 } },
-  { c: 'Lucu', e: '🍮', name: 'Jelly', sw: ['#ffc2d4', '#ff7aa8'], p: { wobble: 1.3, sat: 1.15, sharp: 0.2 } },
   { c: 'Lucu', e: '👾', name: 'Pixel 8-bit', sw: ['#3a3a8a', '#ffd23a'], p: {
       pixel: 80, poster: 5, sat: 1.4, sharp: 0 } },
-  { c: 'Lucu', e: '💥', name: 'Pop Art', sw: ['#ffe14d', '#ff3d6a'], p: {
-      half: 70, poster: 5, sat: 1.6, contrast: 1.2, edge: 0.6, sharp: 0.3 } },
-  { c: 'Lucu', e: '🎨', name: 'Kartun', sw: ['#7ad1ff', '#ff8f3a'], p: {
-      poster: 6, edge: 0.9, sat: 1.5, contrast: 1.15, sharp: 0.8 } },
-  { c: 'Lucu', e: '💡', name: 'Neon Garis', sw: ['#0a0014', '#ff2bd6'], p: { neon: 1, sharp: 0 } },
-  { c: 'Lucu', e: '📺', name: 'Glitch', sw: ['#00ffe1', '#ff2b6a'], p: {
-      glitch: 1, ab: 0.6, scan: 0.3, grain: 0.2, contrast: 1.1 } },
   { c: 'Lucu', e: '🔥', name: 'Termal', sw: ['#2a0a6a', '#ffe14d'], p: { thermal: 1, sharp: 0.3 } },
   { c: 'Lucu', e: '🧪', name: 'Negatif', sw: ['#ffffff', '#111'], p: { invert: 1, contrast: 1.1 } },
   { c: 'Stiker', e: '✨', name: 'Sparkle', sw: ['#fff3b0', '#ffb3e6'], p: {
-      deco: 'sparkle', soft: 0.18, bloom: 0.5, exposure: 0.12, fade: 0.1, sat: 1.1, temp: 0.1, vig: 0.1 } },
+      deco: 'sparkle', exposure: 0.12, fade: 0.1, sat: 1.1, temp: 0.1, vig: 0.1 } },
   { c: 'Stiker', e: '💖', name: 'Cinta', sw: ['#ffc2d9', '#ff4d88'], p: {
-      deco: 'hearts', temp: 0.15, tint: -0.15, exposure: 0.1, soft: 0.15, bloom: 0.3, fade: 0.08, sat: 1.1,
+      deco: 'hearts', temp: 0.15, tint: -0.15, exposure: 0.1, fade: 0.08, sat: 1.1,
       toneAmt: 0.6, shadow: [0.5, 0.46, 0.52], high: [0.66, 0.5, 0.54] } },
   { c: 'Stiker', e: '🌸', name: 'Taman Bunga', sw: ['#ffd6e8', '#a8e6a8'], p: {
-      deco: 'flowers', exposure: 0.12, soft: 0.12, fade: 0.2, sat: 0.95, temp: 0.12, tint: -0.1 } },
+      deco: 'flowers', exposure: 0.12, fade: 0.2, sat: 0.95, temp: 0.12, tint: -0.1 } },
   { c: 'Stiker', e: '🎉', name: 'Pesta', sw: ['#ff6a6a', '#6a9aff'], p: {
-      deco: 'party', sat: 1.3, contrast: 1.1, bloom: 0.3 } },
+      deco: 'party', sat: 1.3, contrast: 1.1, } },
 
   /* ===== Stiker pola: bentuk kecil-kecil, putih, agak buram, memenuhi layar ===== */
   { c: 'Stiker', e: '💗', name: 'Love Buram', sw: ['#ffe3ee', '#ffffff'], p: {
-      pat: 'love', soft: 0.1, bloom: 0.3, exposure: 0.08, fade: 0.08, sat: 1.05, temp: 0.08, sharp: 0.3 } },
+      pat: 'love', exposure: 0.08, fade: 0.08, sat: 1.05, temp: 0.08, sharp: 0.3 } },
   { c: 'Stiker', e: '🩷', name: 'Love Pink', sw: ['#ffb0cd', '#ff7aa8'], p: {
-      pat: 'lovePink', soft: 0.12, bloom: 0.35, exposure: 0.1, fade: 0.1, tint: -0.12, temp: 0.12, sharp: 0.3,
+      pat: 'lovePink', exposure: 0.1, fade: 0.1, tint: -0.12, temp: 0.12, sharp: 0.3,
       toneAmt: 0.5, shadow: [0.5, 0.46, 0.52], high: [0.66, 0.5, 0.54] } },
   { c: 'Stiker', e: '⭐', name: 'Bintang Buram', sw: ['#1d2a5a', '#ffffff'], p: {
-      pat: 'stars', bloom: 0.45, exposure: -0.03, contrast: 1.08, vig: 0.2, sharp: 0.4,
+      pat: 'stars', exposure: -0.03, contrast: 1.08, vig: 0.2, sharp: 0.4,
       toneAmt: 0.6, shadow: [0.42, 0.48, 0.64], high: [0.56, 0.54, 0.54] } },
   { c: 'Stiker', e: '💫', name: 'Glitter', sw: ['#fff6c8', '#ffffff'], p: {
-      pat: 'glitter', bloom: 0.5, soft: 0.08, exposure: 0.08, sharp: 0.4 } },
+      pat: 'glitter', exposure: 0.08, sharp: 0.4 } },
   { c: 'Stiker', e: '🫧', name: 'Gelembung', sw: ['#bfeaff', '#ffffff'], p: {
-      pat: 'bubbles', temp: -0.08, sat: 1.1, exposure: 0.1, soft: 0.06, sharp: 0.4,
+      pat: 'bubbles', temp: -0.08, sat: 1.1, exposure: 0.1, sharp: 0.4,
       toneAmt: 0.5, shadow: [0.44, 0.54, 0.62], high: [0.52, 0.58, 0.62] } },
   { c: 'Stiker', e: '❄️', name: 'Salju', sw: ['#d8ecff', '#ffffff'], p: {
-      pat: 'snow', temp: -0.25, exposure: 0.12, contrast: 1.05, fade: 0.05, bloom: 0.3, sharp: 0.4 } },
+      pat: 'snow', temp: -0.25, exposure: 0.12, contrast: 1.05, fade: 0.05, sharp: 0.4 } },
   { c: 'Stiker', e: '🌼', name: 'Kelopak', sw: ['#fff3c4', '#ffffff'], p: {
-      pat: 'petals', exposure: 0.1, fade: 0.12, soft: 0.1, temp: 0.1, sharp: 0.3 } },
+      pat: 'petals', exposure: 0.1, fade: 0.12, temp: 0.1, sharp: 0.3 } },
   { c: 'Stiker', e: '🍬', name: 'Campur Manis', sw: ['#ffd1e6', '#c9e4ff'], p: {
-      pat: 'mix', sat: 1.15, bloom: 0.35, soft: 0.08, exposure: 0.08, sharp: 0.3 } },
+      pat: 'mix', sat: 1.15, exposure: 0.08, sharp: 0.3 } },
   { c: 'Stiker', e: '🟡', name: 'Bokeh Emas', sw: ['#ffe3a8', '#ff9d3a'], p: {
-      pat: 'bokeh', temp: 0.35, bloom: 0.45, exposure: 0.05, soft: 0.08, vig: 0.2, sharp: 0.3 } },
+      pat: 'bokeh', temp: 0.35, exposure: 0.05, vig: 0.2, sharp: 0.3 } },
   { c: 'Stiker', e: '🔵', name: 'Bokeh Biru', sw: ['#cfe6ff', '#5a8ae0'], p: {
-      pat: 'bokehCool', temp: -0.25, bloom: 0.4, exposure: 0.05, soft: 0.06, vig: 0.2, sharp: 0.3 } },
+      pat: 'bokehCool', temp: -0.25, exposure: 0.05, vig: 0.2, sharp: 0.3 } },
 
   /* ===== Jernih ===== */
   { c: 'Jernih', e: '🍃', name: 'Jernih Alami', sw: ['#b9e0c4', '#4a8a5a'], p: {
@@ -137,21 +125,21 @@ const PRESETS = [
   { c: 'Jernih', e: '🌤️', name: 'Fresh Bright', sw: ['#fffbe0', '#9fd4ff'], p: {
       exposure: 0.2, contrast: 1.05, sat: 1.15, temp: -0.05, fade: 0.03, sharp: 0.6 } },
   { c: 'Jernih', e: '🙂', name: 'Potret Jernih', sw: ['#ffe0cc', '#e8a98a'], p: {
-      exposure: 0.1, contrast: 1.06, sat: 1.05, temp: 0.12, soft: 0.06, bloom: 0.12, sharp: 0.55, vig: 0.12,
+      exposure: 0.1, contrast: 1.06, sat: 1.05, temp: 0.12, sharp: 0.55, vig: 0.12,
       toneAmt: 0.4, shadow: [0.48, 0.5, 0.54], high: [0.6, 0.52, 0.46] } },
   { c: 'Jernih', e: '🏖️', name: 'Pantai', sw: ['#7fd8ff', '#ffe8b0'], p: {
-      exposure: 0.1, contrast: 1.15, sat: 1.3, temp: -0.1, sharp: 0.75, bloom: 0.1,
+      exposure: 0.1, contrast: 1.15, sat: 1.3, temp: -0.1, sharp: 0.75, 
       toneAmt: 0.5, shadow: [0.44, 0.54, 0.66], high: [0.6, 0.56, 0.5] } },
   { c: 'Jernih', e: '🌅', name: 'Senja Jernih', sw: ['#ffb066', '#ff5a7a'], p: {
-      contrast: 1.15, sat: 1.3, temp: 0.45, sharp: 0.65, bloom: 0.2, vig: 0.18,
+      contrast: 1.15, sat: 1.3, temp: 0.45, sharp: 0.65, vig: 0.18,
       toneAmt: 0.8, shadow: [0.46, 0.46, 0.58], high: [0.7, 0.52, 0.38] } },
   { c: 'Jernih', e: '🏙️', name: 'Kota Malam', sw: ['#16214a', '#ff9a3a'], p: {
-      exposure: 0.1, contrast: 1.25, sat: 1.2, bloom: 0.4, sharp: 0.8, vig: 0.3,
+      exposure: 0.1, contrast: 1.25, sat: 1.2, sharp: 0.8, vig: 0.3,
       toneAmt: 1.0, shadow: [0.38, 0.5, 0.62], high: [0.66, 0.52, 0.38] } },
   { c: 'Jernih', e: '🍵', name: 'Matcha', sw: ['#cfe8b0', '#6a9a4a'], p: {
       exposure: 0.08, sat: 1.1, tint: 0.25, temp: 0.05, fade: 0.06, sharp: 0.55, contrast: 1.05 } },
   { c: 'Jernih', e: '📷', name: 'Analog Jernih', sw: ['#f0dcb4', '#7a9a8a'], p: {
-      contrast: 1.08, sat: 1.05, temp: 0.15, grain: 0.08, sharp: 0.7, fade: 0.05, vig: 0.15,
+      contrast: 1.08, sat: 1.05, temp: 0.15, sharp: 0.7, fade: 0.05, vig: 0.15,
       toneAmt: 0.4, shadow: [0.46, 0.52, 0.56], high: [0.6, 0.53, 0.44] } },
   { c: 'Jernih', e: '🧊', name: 'Es Biru', sw: ['#d4f0ff', '#4a8ac8'], p: {
       exposure: 0.08, contrast: 1.12, sat: 1.1, temp: -0.45, sharp: 0.7,
@@ -160,8 +148,61 @@ const PRESETS = [
       contrast: 1.15, sat: 1.25, tint: 0.3, temp: 0.05, sharp: 0.7, vig: 0.15,
       toneAmt: 0.5, shadow: [0.4, 0.55, 0.5], high: [0.58, 0.56, 0.46] } },
   { c: 'Estetik', e: '🍑', name: 'Pink Haze', sw: ['#ffd9e0', '#f2a9b8'], p: {
-      exposure: 0.15, temp: 0.1, tint: -0.2, fade: 0.2, soft: 0.1, sat: 0.95, bloom: 0.25, sharp: 0.2,
+      exposure: 0.15, temp: 0.1, tint: -0.2, fade: 0.2, sat: 0.95, sharp: 0.2,
       toneAmt: 0.7, shadow: [0.52, 0.46, 0.54], high: [0.68, 0.52, 0.54] } },
+
+  /* ===== Tambahan ringan (hanya pengolahan warna) ===== */
+  { c: 'Jernih', e: '☕', name: 'Krem Hangat', sw: ['#f3e2c6', '#c79a6a'], p: {
+      exposure: 0.08, contrast: 1.06, sat: 0.95, temp: 0.3, fade: 0.05, sharp: 0.5,
+      toneAmt: 0.5, shadow: [0.48, 0.48, 0.52], high: [0.64, 0.54, 0.42] } },
+  { c: 'Jernih', e: '🩵', name: 'Langit Biru', sw: ['#bfe3ff', '#3a86d8'], p: {
+      exposure: 0.1, contrast: 1.1, sat: 1.2, temp: -0.2, sharp: 0.6,
+      toneAmt: 0.5, shadow: [0.42, 0.5, 0.66], high: [0.54, 0.58, 0.66] } },
+  { c: 'Jernih', e: '🌿', name: 'Mint Segar', sw: ['#d2f5e0', '#4cbf8a'], p: {
+      exposure: 0.12, sat: 1.05, tint: 0.3, temp: -0.1, fade: 0.05, sharp: 0.5 } },
+  { c: 'Jernih', e: '💜', name: 'Lavender', sw: ['#e6d8ff', '#9a7ad8'], p: {
+      exposure: 0.1, sat: 1.0, tint: -0.25, temp: -0.15, fade: 0.08, sharp: 0.4,
+      toneAmt: 0.6, shadow: [0.5, 0.46, 0.62], high: [0.6, 0.52, 0.66] } },
+  { c: 'Jernih', e: '🥭', name: 'Mangga Cerah', sw: ['#ffe27a', '#ff9a2e'], p: {
+      exposure: 0.1, contrast: 1.1, sat: 1.35, temp: 0.4, sharp: 0.6 } },
+  { c: 'Estetik', e: '🤎', name: 'Mocha', sw: ['#d8b898', '#6b4a35'], p: {
+      contrast: 1.12, sat: 0.75, temp: 0.3, fade: 0.12, sharp: 0.4,
+      toneAmt: 0.7, shadow: [0.46, 0.4, 0.36], high: [0.66, 0.56, 0.44] } },
+  { c: 'Estetik', e: '🧡', name: 'Coral Sunset', sw: ['#ff9a78', '#8a4a9a'], p: {
+      contrast: 1.08, sat: 1.25, temp: 0.35, tint: -0.12, sharp: 0.5,
+      toneAmt: 0.9, shadow: [0.5, 0.44, 0.62], high: [0.72, 0.52, 0.46] } },
+  { c: 'Estetik', e: '🌹', name: 'Dusty Rose', sw: ['#e8b8c0', '#a8707a'], p: {
+      exposure: 0.08, sat: 0.8, tint: -0.2, temp: 0.12, fade: 0.15, sharp: 0.3,
+      toneAmt: 0.6, shadow: [0.52, 0.46, 0.5], high: [0.68, 0.54, 0.56] } },
+  { c: 'Estetik', e: '🍂', name: 'Autumn', sw: ['#e8a85a', '#8a4a2a'], p: {
+      contrast: 1.12, sat: 1.1, temp: 0.5, fade: 0.06, sharp: 0.5,
+      toneAmt: 0.7, shadow: [0.46, 0.44, 0.4], high: [0.7, 0.54, 0.38] } },
+  { c: 'Estetik', e: '🌙', name: 'Midnight Blue', sw: ['#1a2a5a', '#6a8ac8'], p: {
+      exposure: -0.15, contrast: 1.2, sat: 0.9, temp: -0.35, vig: 0.3, sharp: 0.5,
+      toneAmt: 0.9, shadow: [0.36, 0.44, 0.68], high: [0.5, 0.56, 0.68] } },
+  { c: 'Estetik', e: '⚪', name: 'Chrome', sw: ['#e6e8ea', '#6a7078'], p: {
+      sat: 0.5, contrast: 1.35, temp: -0.05, sharp: 0.8 } },
+  { c: 'Estetik', e: '🖤', name: 'Matte Black', sw: ['#4a4a4e', '#1c1c20'], p: {
+      exposure: -0.05, sat: 0.7, contrast: 0.95, fade: 0.3, sharp: 0.3 } },
+  { c: 'Estetik', e: '🔷', name: 'Biru Monokrom', sw: ['#a8c4e8', '#2a3a5a'], p: {
+      bw: 1, contrast: 1.2, sharp: 0.5, toneAmt: 1.4, shadow: [0.38, 0.44, 0.62], high: [0.52, 0.58, 0.7] } },
+  { c: 'Estetik', e: '🍓', name: 'Rosy Cheek', sw: ['#ffc4cc', '#e8707a'], p: {
+      exposure: 0.12, contrast: 1.05, sat: 1.15, temp: 0.15, tint: -0.2, fade: 0.05, sharp: 0.4 } },
+  { c: 'Lucu', e: '🟣', name: 'Duotone Ungu', sw: ['#1f0a4d', '#f2ccff'], p: {
+      duo: 1, duoA: [0.12, 0.04, 0.3], duoB: [0.95, 0.8, 1] } },
+  { c: 'Lucu', e: '🟠', name: 'Duotone Oranye', sw: ['#3a0e00', '#ffd980'], p: {
+      duo: 1, duoA: [0.2, 0.05, 0.0], duoB: [1, 0.85, 0.5] } },
+  { c: 'Lucu', e: '🍀', name: 'Duotone Mint', sw: ['#00262a', '#ccffe6'], p: {
+      duo: 1, duoA: [0.0, 0.15, 0.15], duoB: [0.8, 1, 0.9] } },
+  { c: 'Lucu', e: '🎈', name: 'Pop Kuning-Biru', sw: ['#1a26a0', '#ffe633'], p: {
+      duo: 1, duoA: [0.1, 0.15, 0.6], duoB: [1, 0.9, 0.2], contrast: 1.1 } },
+  { c: 'Lucu', e: '🍭', name: 'Pastel Poster', sw: ['#ffc4e0', '#a8d8ff'], p: {
+      poster: 6, sat: 1.3, exposure: 0.1 } },
+  { c: 'Lucu', e: '🕹️', name: 'Retro 4 Warna', sw: ['#1a0d33', '#ffd9a0'], p: {
+      poster: 4, duo: 0.6, duoA: [0.1, 0.05, 0.2], duoB: [1, 0.85, 0.6] } },
+  { c: 'Lucu', e: '🔴', name: 'Sinema Merah', sw: ['#000', '#ff5a4d'], p: {
+      duo: 0.9, duoA: [0, 0, 0], duoB: [1, 0.35, 0.3], contrast: 1.2 } },
+
 ];
 const START_PRESET = Math.max(0, PRESETS.findIndex((p) => p.name === 'Jernih Alami'));
 const TABS = ['Klasik', 'Jernih', 'Estetik', 'Lucu', 'Stiker'];
@@ -267,7 +308,6 @@ PRESETS.forEach((p) => { p.c = p.c || 'Klasik'; });
 // (Nilainya tetap bisa dinaikkan lewat slider "Atur Filter".)
 PRESETS.forEach((pr) => {
   const q = pr.p;
-  q.grain = 0; // tanpa grain sama sekali
   if (q.fade) q.fade = +(q.fade * 0.7).toFixed(3);
   if (q.vig) q.vig = +(q.vig * 0.75).toFixed(3);
 });
@@ -293,17 +333,12 @@ const SLIDERS = [
   ['fade', 'Pudar', 0, 1, 0.01],
   ['vig', 'Vignette', 0, 1, 0.01],
   ['sharp', 'Ketajaman', 0, 2, 0.01],
-  ['bloom', 'Bloom/Glow', 0, 1, 0.01],
-  ['ab', 'Aberasi lensa', 0, 1, 0.01],
   ['leak', 'Light leak', 0, 1, 0.01],
-  ['soft', 'Soft focus', 0, 0.6, 0.01],
   ['bulge', 'Cembung/Cekung', -1, 1, 0.01],
   ['swirl', 'Pusaran', -4, 4, 0.01],
   ['pixel', 'Pixel', 0, 200, 1],
   ['poster', 'Posterize', 0, 12, 1],
-  ['glitch', 'Glitch', 0, 1, 0.01],
   ['scan', 'Scanline', 0, 1, 0.01],
-  ['wobble', 'Goyang', 0, 2, 0.01],
   ['duo', 'Duotone', 0, 1, 0.01],
 ];
 
@@ -323,11 +358,9 @@ uniform vec4 uRect;      // x,y,w,h (uv sumber, origin kiri-atas)
 uniform float uMirror;
 uniform vec2 uPx;        // 1/lebar, 1/tinggi output
 uniform float uTime, uAspect;
-uniform float uExposure, uContrast, uSat, uTemp, uTint, uFade, uBw, uGrain, uVig,
-              uSharp, uBloom, uAb, uLeak, uToneAmt, uSoft;
+uniform float uExposure, uContrast, uSat, uTemp, uTint, uFade, uBw, uVig, uSharp, uLeak, uToneAmt;
 uniform vec3 uShadow, uHigh, uDuoA, uDuoB;
-uniform float uBulge, uSwirl, uPixel, uKaleido, uPoster, uEdge, uNeon, uGlitch, uThermal,
-              uHalf, uMfx, uWobble, uDuo, uInvert, uScan, uClock, uLite, uHQ; // uLite=1: pratinjau ringan; uHQ=1: perbesar dengan bicubic
+uniform float uBulge, uSwirl, uPixel, uPoster, uThermal, uMfx, uDuo, uInvert, uScan, uClock, uLite, uHQ;
 in vec2 vUv;
 out vec4 o;
 
@@ -338,41 +371,23 @@ float hash(vec2 p){
 }
 const vec3 LUM = vec3(0.299, 0.587, 0.114);
 
-// distorsi / efek lucu pada koordinat
+// distorsi ringan pada koordinat (cermin, cembung/cekung, pusaran, pixel)
 vec2 warp(vec2 uv){
   vec2 p = uv;
   if (uMfx > 0.5) {
     if (uMfx < 1.5 || uMfx > 2.5) p.x = p.x > 0.5 ? 1.0 - p.x : p.x;
     if (uMfx > 1.5) p.y = p.y > 0.5 ? 1.0 - p.y : p.y;
   }
-  if (uBulge != 0.0 || uSwirl != 0.0 || uKaleido > 0.5) {
+  if (uBulge != 0.0 || uSwirl != 0.0) {
     vec2 q = (p - 0.5) * vec2(uAspect, 1.0);
     float r = length(q);
-    float fall = 1.0 - smoothstep(0.0, 0.8, r);
-    q *= 1.0 - uBulge * fall;
+    q *= 1.0 - uBulge * (1.0 - smoothstep(0.0, 0.8, r));
     if (uSwirl != 0.0) {
       float a = uSwirl * (1.0 - smoothstep(0.0, 0.7, r));
       float sn = sin(a), cs = cos(a);
       q = mat2(cs, -sn, sn, cs) * q;
     }
-    if (uKaleido > 0.5) {
-      float ang = atan(q.y, q.x);
-      float seg = 6.2831853 / uKaleido;
-      ang = mod(ang, seg);
-      ang = abs(ang - seg * 0.5);
-      q = length(q) * vec2(cos(ang), sin(ang));
-    }
     p = q / vec2(uAspect, 1.0) + 0.5;
-  }
-  if (uWobble > 0.0) {
-    p.x += sin(p.y * 28.0 + uClock * 5.0) * 0.012 * uWobble;
-    p.y += sin(p.x * 22.0 + uClock * 4.0) * 0.012 * uWobble;
-  }
-  if (uGlitch > 0.0) {
-    float row = floor(p.y * 28.0);
-    float t = floor(uClock * 7.0);
-    if (hash(vec2(row, t)) > 1.0 - 0.22 * uGlitch)
-      p.x += (hash(vec2(row, t + 9.0)) - 0.5) * 0.18 * uGlitch;
   }
   if (uPixel > 0.5) {
     vec2 cells = vec2(uPixel * uAspect, uPixel);
@@ -388,7 +403,7 @@ vec2 srcUv(vec2 uv){
 }
 vec3 tex(vec2 uv){ return texture(uTex, srcUv(uv)).rgb; }
 
-// Catmull-Rom 9 sampel: perbesaran mulus & tajam, tanpa blok-blok kasar
+// Catmull-Rom 9 sampel: perbesaran mulus & tajam (hanya dipakai saat memperbesar foto)
 vec3 texCR(vec2 s){
   vec2 tsz = vec2(textureSize(uTex, 0));
   vec2 pos = s * tsz;
@@ -413,53 +428,21 @@ vec3 texCR(vec2 s){
   return max(r, 0.0);
 }
 vec3 texHQ(vec2 uv){ return uHQ > 0.5 ? texCR(srcUv(uv)) : tex(uv); }
-float lumAt(vec2 uv){ return dot(tex(uv), LUM); }
 
 void main(){
   vec2 c = vUv - 0.5;
-  vec3 col;
-  if (uAb > 0.0 || uGlitch > 0.0) {
-    vec2 off = c * uAb * 0.012 + vec2(uGlitch * 0.006, 0.0);
-    col = vec3(texHQ(vUv + off).r, texHQ(vUv).g, texHQ(vUv - off).b);
-  } else {
-    col = texHQ(vUv);
-  }
+  vec3 col = texHQ(vUv);
 
-  // sharpen / soft
+  // ketajaman: pratinjau 2 sampel, hasil foto 4 sampel
   if (uSharp > 0.0) {
     vec3 blur;
-    if (uLite > 0.5) {  // pratinjau: 2 sampel
+    if (uLite > 0.5) {
       blur = (tex(vUv + uPx * 0.7) + tex(vUv - uPx * 0.7)) * 0.5;
-    } else {            // hasil foto: 4 sampel
+    } else {
       blur = (tex(vUv + vec2(uPx.x, 0.0)) + tex(vUv - vec2(uPx.x, 0.0))
             + tex(vUv + vec2(0.0, uPx.y)) + tex(vUv - vec2(0.0, uPx.y))) * 0.25;
     }
     col += (col - blur) * uSharp * (uHQ > 0.5 ? 0.8 : 1.6);
-  }
-  if (uSoft > 0.0) {
-    int n = uLite > 0.5 ? 3 : 6;
-    float stp = 6.2831853 / float(n);
-    vec3 wide = vec3(0.0);
-    for (int i = 0; i < 6; i++) {
-      if (i >= n) break;
-      float a = float(i) * stp;
-      wide += tex(vUv + vec2(cos(a) / uAspect, sin(a)) * 0.006);
-    }
-    col = mix(col, wide / float(n), uSoft);
-  }
-
-  // bloom (highlight glow) — pratinjau 4 sampel, hasil foto 8 sampel
-  if (uBloom > 0.0) {
-    int n = uLite > 0.5 ? 4 : 8;
-    float stp = 6.2831853 / float(n);
-    vec3 b = vec3(0.0);
-    for (int i = 0; i < 8; i++) {
-      if (i >= n) break;
-      float a = float(i) * stp + 0.3;
-      float rad = (i % 2 == 0) ? 0.010 : 0.024;
-      b += max(tex(vUv + vec2(cos(a) / uAspect, sin(a)) * rad) - 0.62, 0.0);
-    }
-    col += b / float(n) * uBloom * 2.4;
   }
 
   // tone dasar
@@ -478,7 +461,7 @@ void main(){
   // pudar (angkat hitam)
   col = mix(vec3(uFade * 0.26), vec3(1.0 - uFade * 0.06), clamp(col, 0.0, 1.0));
 
-  // hitam putih
+  // hitam putih (+ warna nada bila ada)
   l = dot(col, LUM);
   col = mix(col, vec3(l) + (tone - 0.5) * uToneAmt * 0.45 * step(0.99, uBw), uBw);
 
@@ -490,7 +473,7 @@ void main(){
     col = 1.0 - (1.0 - col) * (1.0 - lk * uLeak * 0.75);
   }
 
-  // ===== efek khusus =====
+  // efek warna lucu (murah: tanpa sampel tambahan)
   if (uInvert > 0.0) col = mix(col, 1.0 - col, uInvert);
   if (uDuo > 0.0) {
     float ld = dot(col, LUM);
@@ -505,49 +488,11 @@ void main(){
     col = mix(col, th, uThermal);
   }
   if (uPoster > 1.5) col = floor(clamp(col, 0.0, 1.0) * uPoster + 0.5) / uPoster;
-  if (uHalf > 0.0) {
-    vec2 hf = fract(vUv * vec2(uAspect, 1.0) * uHalf) - 0.5;
-    float hl = clamp(dot(col, LUM), 0.0, 1.0);
-    float rad = sqrt(1.0 - hl) * 0.62 + 0.05;
-    float ink = 1.0 - smoothstep(rad - 0.1, rad + 0.04, length(hf));
-    col = mix(vec3(0.99, 0.96, 0.88), col * 1.1, ink);
-  }
-  if (uEdge > 0.0 || uNeon > 0.0) {
-    vec2 sp = uPx * 1.6;
-    float gx, gy;
-    if (uLite > 0.5) {  // pratinjau: beda silang 4 sampel
-      gx = (lumAt(vUv + vec2(sp.x, 0.0)) - lumAt(vUv - vec2(sp.x, 0.0))) * 2.0;
-      gy = (lumAt(vUv + vec2(0.0, sp.y)) - lumAt(vUv - vec2(0.0, sp.y))) * 2.0;
-    } else {            // hasil foto: Sobel 8 sampel
-      float e0 = lumAt(vUv + vec2(-sp.x, -sp.y)), e1 = lumAt(vUv + vec2(0.0, -sp.y)), e2 = lumAt(vUv + vec2(sp.x, -sp.y));
-      float e3 = lumAt(vUv + vec2(-sp.x, 0.0)),                                          e5 = lumAt(vUv + vec2(sp.x, 0.0));
-      float e6 = lumAt(vUv + vec2(-sp.x, sp.y)),  e7 = lumAt(vUv + vec2(0.0, sp.y)),  e8 = lumAt(vUv + vec2(sp.x, sp.y));
-      gx = -e0 - 2.0 * e3 - e6 + e2 + 2.0 * e5 + e8;
-      gy = -e0 - 2.0 * e1 - e2 + e6 + 2.0 * e7 + e8;
-    }
-    float edge = smoothstep(0.12, 0.45, length(vec2(gx, gy)));
-    col = mix(col, vec3(0.05), edge * uEdge);
-    if (uNeon > 0.0) {
-      vec3 nc = 0.5 + 0.5 * cos(6.2831853 * (vec3(0.0, 0.33, 0.67) + dot(col, LUM) * 1.2 + uClock * 0.15));
-      col = mix(col, vec3(0.02, 0.0, 0.05) + col * 0.12 + nc * edge * 1.7, uNeon);
-    }
-  }
-  if (uScan > 0.0) {
-    col *= 1.0 - uScan * 0.22 * (0.5 + 0.5 * sin(vUv.y * 720.0 * 3.14159265));
-    col *= 1.0 - uScan * 0.04 * sin(uClock * 60.0);
-  }
+  if (uScan > 0.0) col *= 1.0 - uScan * 0.22 * (0.5 + 0.5 * sin(vUv.y * 720.0 * 3.14159265));
 
   // vignette
-  float d = length(c * vec2(1.0, 1.0));
+  float d = length(c);
   col *= mix(1.0, 1.0 - uVig, smoothstep(0.28, 0.78, d));
-
-  // grain (bobot di mid-tone)
-  if (uGrain > 0.0) {
-    vec2 cell = floor(vUv * vec2(uAspect, 1.0) * 1400.0);
-    float n = hash(cell + vec2(uTime * 61.0, uTime * 17.0)) - 0.5;
-    float w = 1.0 - abs(dot(col, LUM) - 0.5) * 1.4;
-    col += n * uGrain * 0.28 * w;
-  }
 
   // dither anti-banding
   col += (hash(gl_FragCoord.xy + uTime) - 0.5) / 255.0;
@@ -556,10 +501,8 @@ void main(){
 
 const UNIFORMS = {
   exposure: 'uExposure', contrast: 'uContrast', sat: 'uSat', temp: 'uTemp', tint: 'uTint', fade: 'uFade',
-  bw: 'uBw', grain: 'uGrain', vig: 'uVig', sharp: 'uSharp', bloom: 'uBloom', ab: 'uAb', leak: 'uLeak',
-  toneAmt: 'uToneAmt', soft: 'uSoft',
-  bulge: 'uBulge', swirl: 'uSwirl', pixel: 'uPixel', kaleido: 'uKaleido', poster: 'uPoster', edge: 'uEdge',
-  neon: 'uNeon', glitch: 'uGlitch', thermal: 'uThermal', half: 'uHalf', mfx: 'uMfx', wobble: 'uWobble',
+  bw: 'uBw', vig: 'uVig', sharp: 'uSharp', leak: 'uLeak', toneAmt: 'uToneAmt',
+  bulge: 'uBulge', swirl: 'uSwirl', pixel: 'uPixel', poster: 'uPoster', thermal: 'uThermal', mfx: 'uMfx',
   duo: 'uDuo', invert: 'uInvert', scan: 'uScan',
 };
 
