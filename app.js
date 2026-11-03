@@ -864,6 +864,7 @@ function overlayLayer(p, w, h) {
 // Resolusi pratinjau menyesuaikan diri: turun otomatis kalau perangkat kewalahan.
 const perfCeil = () => (S.eco ? 720 : matchMedia('(pointer:coarse)').matches ? 960 : 1280);
 const PERF = { max: perfCeil(), last: 0, drawn: 0, ema: 16, calm: 0, cool: 0 };
+let exportBusy = 0; // >0 saat ekspor foto sedang jalan (adaptasi kualitas pratinjau dijeda)
 let newFrame = true;
 const hasRVFC = 'requestVideoFrameCallback' in HTMLVideoElement.prototype;
 if (hasRVFC) {
@@ -874,7 +875,7 @@ if (hasRVFC) {
 function tunePerf(now) {
   const dt = Math.min(100, now - PERF.last);
   PERF.last = now;
-  if (document.hidden || dt <= 0 || PERF.cool > now) return;
+  if (document.hidden || dt <= 0 || PERF.cool > now || exportBusy) return;
   PERF.ema = PERF.ema * 0.92 + dt * 0.08;
   if (PERF.ema > 36 && PERF.max > 480) {
     PERF.max = Math.max(480, Math.round(PERF.max * 0.8));
@@ -1143,17 +1144,26 @@ let exportChain = Promise.resolve();
 let pendingSaves = 0;
 
 // Render satu foto jadi file. toBlob dipanggil di task yang sama dengan render WebGL (tanpa await di antaranya).
+let shrinkTimer = 0;
 async function renderToBlob(shot) {
-  await new Promise((r) => setTimeout(r, 0)); // beri napas ke UI
-  const out = renderExport(shot);
-  const w = out.width, h = out.height;
-  const mime = shot.format === 'png' ? 'image/png' : 'image/jpeg';
-  const blob = await new Promise((r) => out.toBlob(r, mime, 0.92));
-  if (!blob) throw new Error('Gagal membuat file');
-  if (out !== exportR.canvas) out.width = out.height = 0;
-  exportR.canvas.width = exportR.canvas.height = 1; // lepas memori GPU ukuran besar
-  ovCache = { key: '', cv: null };
-  return { blob, w, h };
+  exportBusy++;
+  clearTimeout(shrinkTimer);
+  try {
+    await new Promise((r) => setTimeout(r, 0)); // beri napas ke UI
+    const out = renderExport(shot);
+    const w = out.width, h = out.height;
+    const mime = shot.format === 'png' ? 'image/png' : 'image/jpeg';
+    const blob = await new Promise((r) => out.toBlob(r, mime, 0.92));
+    if (!blob) throw new Error('Gagal membuat file');
+    if (out !== exportR.canvas) out.width = out.height = 0;
+    return { blob, w, h };
+  } finally {
+    exportBusy--;
+    // lepas memori GPU ukuran besar hanya setelah benar-benar menganggur (hindari alokasi ulang antar foto)
+    shrinkTimer = setTimeout(() => {
+      if (!exportBusy && exportR) { exportR.canvas.width = exportR.canvas.height = 1; ovCache = { key: '', cv: null }; }
+    }, 5000);
+  }
 }
 
 const SIZE_LABEL = { uhd: 'Ultra HD', fhd: 'Full HD', orig: 'resolusi penuh' };
@@ -1168,6 +1178,7 @@ async function saveShot(shot) {
                ratio: shot.ratio, format: shot.format, own: shot.src !== S.img };
     }
     addShot(r.blob, r.w, r.h, keep);
+    queueHD(shots[shots.length - 1]);
     pendingSaves--;
     if (pendingSaves > 0) toast('Tersimpan • ' + pendingSaves + ' lagi diproses…');
     else toast('Tersimpan — ' + SIZE_LABEL[S.exportSize] + ' dibuat saat diunduh');
@@ -1221,6 +1232,7 @@ function releaseSource(s) {
     s.source = null;
   }
   s.hd = null;
+  s.jobs = null;
 }
 function addShot(blob, w, h, source) {
   const ext = blob.type === 'image/png' ? 'png' : 'jpg';
@@ -1253,18 +1265,47 @@ function download(s) {
 function showLoading(text) { $('#loadingText').textContent = text; $('#loading').hidden = false; }
 function hideLoading() { $('#loading').hidden = true; }
 
-// File untuk diunduh: dirender ulang dari sumber asli dengan ukuran pilihan (Ultra HD dst).
-async function hdBlobFor(s) {
+// File untuk diunduh: dirender dari sumber asli dengan ukuran pilihan (Ultra HD dst).
+// Satu pekerjaan per ukuran: bila sudah disiapkan di latar belakang, tombol Unduh langsung memakainya.
+function hdBlobFor(s) {
   const target = S.exportSize;
-  if (!s.source) return { blob: s.blob, w: s.w, h: s.h, url: s.url, target };
-  if (s.hd && s.hd.target === target) return s.hd;
-  const r = await new Promise((resolve, reject) => {
+  if (!s.source) return Promise.resolve({ blob: s.blob, w: s.w, h: s.h, url: s.url, target });
+  s.jobs = s.jobs || {};
+  if (s.jobs[target]) return s.jobs[target];
+  const job = new Promise((resolve, reject) => {
     exportChain = exportChain.then(async () => {
-      try { resolve(await renderToBlob({ ...s.source, exportSize: target })); } catch (e) { reject(e); }
+      try {
+        if (!s.source) throw new Error('sumber foto sudah dilepas');
+        resolve({ ...(await renderToBlob({ ...s.source, exportSize: target })), target });
+      } catch (e) { if (s.jobs) delete s.jobs[target]; reject(e); }
     });
   });
-  s.hd = { ...r, target };
-  return s.hd;
+  s.jobs[target] = job;
+  return job;
+}
+
+// Antrean persiapan di latar belakang: jalan hanya saat tidak sedang menjepret / menyimpan / mengunduh.
+const hdQueue = [];
+let hdRunning = false;
+function queueHD(sh) {
+  if (!sh || !sh.source) return;
+  hdQueue.push(sh);
+  pumpHD();
+}
+async function pumpHD() {
+  if (hdRunning) return;
+  hdRunning = true;
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  try {
+    while (hdQueue.length) {
+      if (pendingSaves > 0 || busy || dlBusy) { await sleep(400); continue; }
+      const sh = hdQueue.shift();
+      if (!sh.source || !shots.includes(sh)) continue;
+      await sleep(300); // beri ruang untuk UI dan jepretan berikutnya
+      if (pendingSaves > 0 || busy) { hdQueue.unshift(sh); continue; }
+      try { await hdBlobFor(sh); } catch (e) { /* diulang saat diunduh */ }
+    }
+  } finally { hdRunning = false; }
 }
 
 let dlBusy = false;
