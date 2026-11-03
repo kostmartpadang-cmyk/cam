@@ -646,12 +646,12 @@ const S = {
   facing: 'environment',
   isFront: false,
   camRes: 'fhd', // pratinjau 1080p supaya ringan; hasil Ultra HD tetap lewat ekspor / mode sensor
-  exportSize: 'uhd',
+  exportSize: 'orig', // cepat; pilih Ultra HD di Pengaturan bila mau ukuran lebih besar
   format: 'jpeg',
   ratio: 'native',
   mirror: true,
   grid: false,
-  sensor: matchMedia('(pointer:coarse)').matches && 'ImageCapture' in window,
+  sensor: false, // kualitas maksimal (lebih lambat) — opsional di Pengaturan
   eco: matchMedia('(pointer:coarse)').matches, // mode hemat: pratinjau 720 px, 24 fps
   sound: true,
   timer: 0,
@@ -659,11 +659,11 @@ const S = {
 };
 const SAVED_KEYS = ['camRes', 'exportSize', 'format', 'ratio', 'mirror', 'grid', 'sensor', 'sound', 'facing', 'eco'];
 try {
-  const sv = JSON.parse(localStorage.getItem('camawa2') || '{}');
+  const sv = JSON.parse(localStorage.getItem('camawa3') || '{}');
   SAVED_KEYS.forEach((k) => { if (k in sv) S[k] = sv[k]; });
 } catch (e) { /* abaikan */ }
 const saveSettings = () => {
-  try { localStorage.setItem('camawa2', JSON.stringify(Object.fromEntries(SAVED_KEYS.map((k) => [k, S[k]])))); } catch (e) { /* abaikan */ }
+  try { localStorage.setItem('camawa3', JSON.stringify(Object.fromEntries(SAVED_KEYS.map((k) => [k, S[k]])))); } catch (e) { /* abaikan */ }
 };
 
 const view = $('#view');
@@ -691,10 +691,10 @@ function srcSize() {
   return [video.videoWidth, video.videoHeight];
 }
 
-function cropInfo(sw, sh) {
+function cropInfo(sw, sh, ratio = S.ratio) {
   let r = sw / sh;
-  if (S.ratio !== 'native') {
-    const [a, b] = S.ratio.split(':').map(Number);
+  if (ratio !== 'native') {
+    const [a, b] = ratio.split(':').map(Number);
     r = a / b;
   }
   let rect;
@@ -739,47 +739,54 @@ function compose(dst, glc, p) {
   }
   ctx.drawImage(glc, ox, oy, w, h);
   const ov = overlayLayer(p, w, h);
-  if (ov) ctx.drawImage(ov, ox, oy);
+  if (ov) ctx.drawImage(ov, ox, oy, w, h);
+  if (p.date && (!ov || ov.width < w)) drawDate(ctx, w, h, ox, oy);
 }
 
-// Pola, stiker emoji, dan cap tanggal digambar SEKALI lalu di-cache (tidak digambar ulang tiap frame).
+// Pola & stiker digambar SEKALI dengan resolusi rendah (maks 1400 px, cukup karena memang buram) lalu
+// diskalakan. Cap tanggal digambar tajam langsung di ukuran akhir.
+function drawDate(ctx, w, h, ox, oy) {
+  const d = new Date(), pad = (n) => String(n).padStart(2, '0');
+  const t = "'" + String(d.getFullYear()).slice(2) + ' ' + pad(d.getMonth() + 1) + ' ' + pad(d.getDate());
+  const fs = Math.max(12, Math.round(h * 0.036));
+  ctx.save();
+  ctx.font = 'bold ' + fs + 'px "Courier New", monospace';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'alphabetic';
+  ctx.shadowColor = 'rgba(255,110,0,.85)';
+  ctx.shadowBlur = fs * 0.4;
+  ctx.fillStyle = '#ff9d2e';
+  ctx.fillText(t, ox + w - fs * 0.9, oy + h - fs * 0.9);
+  ctx.restore();
+}
+
 let ovCache = { key: '', cv: null };
 function overlayLayer(p, w, h) {
   const hasPat = p.pat && PATTERNS[p.pat], hasDeco = p.deco && DECO[p.deco];
-  if (!hasPat && !hasDeco && !p.date) return null;
-  const d = new Date();
-  const key = `${p.pat}|${p.deco}|${p.date}|${w}|${h}|${d.toDateString()}`;
+  const k = Math.min(1, 1400 / Math.max(w, h));
+  if (!hasPat && !hasDeco && !(p.date && k === 1)) return null;
+  const lw = Math.round(w * k), lh = Math.round(h * k);
+  const key = [p.pat, p.deco, p.date, lw, lh, new Date().toDateString()].join('|');
   if (ovCache.key === key) return ovCache.cv;
   const cv = document.createElement('canvas');
-  cv.width = w; cv.height = h;
+  cv.width = lw; cv.height = lh;
   const ctx = cv.getContext('2d');
-  if (hasPat) drawPattern(ctx, p.pat, w, h);
+  if (hasPat) drawPattern(ctx, p.pat, lw, lh);
   if (hasDeco) {
     const set = DECO[p.deco];
-    const base = Math.min(w, h) * 0.12;
+    const base = Math.min(lw, lh) * 0.12;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    DECO_SPOTS.forEach(([x, y, k, rot], i) => {
+    DECO_SPOTS.forEach(([x, y, kk, rot], i) => {
       ctx.save();
-      ctx.translate(x * w, y * h);
+      ctx.translate(x * lw, y * lh);
       ctx.rotate(rot);
-      ctx.font = `${Math.round(base * k)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
+      ctx.font = Math.round(base * kk) + 'px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
       ctx.fillText(set[i % set.length], 0, 0);
       ctx.restore();
     });
   }
-  if (p.date) {
-    const pad = (n) => String(n).padStart(2, '0');
-    const t = `'${String(d.getFullYear()).slice(2)} ${pad(d.getMonth() + 1)} ${pad(d.getDate())}`;
-    const fs = Math.max(12, Math.round(h * 0.036));
-    ctx.font = `bold ${fs}px "Courier New", monospace`;
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'alphabetic';
-    ctx.shadowColor = 'rgba(255,110,0,.85)';
-    ctx.shadowBlur = fs * 0.4;
-    ctx.fillStyle = '#ff9d2e';
-    ctx.fillText(t, w - fs * 0.9, h - fs * 0.9);
-  }
+  if (p.date && k === 1) drawDate(ctx, lw, lh, 0, 0);
   ovCache = { key, cv };
   return cv;
 }
@@ -1040,55 +1047,81 @@ async function grabSource() {
   return { src, sw, sh, mirror };
 }
 
-function renderExport({ src, sw, sh, mirror }) {
+function renderExport({ src, sw, sh, mirror, params, ratio, exportSize }) {
   if (!exportR) exportR = new Renderer(document.createElement('canvas'));
-  const { rect, pw, ph } = cropInfo(sw, sh);
+  const { rect, pw, ph } = cropInfo(sw, sh, ratio);
   let scale = 1;
-  if (S.exportSize === 'uhd') scale = 3840 / Math.max(pw, ph);
-  else if (S.exportSize === 'fhd') scale = 1920 / Math.max(pw, ph);
+  if (exportSize === 'uhd') scale = 3840 / Math.max(pw, ph);
+  else if (exportSize === 'fhd') scale = 1920 / Math.max(pw, ph);
   scale = Math.min(scale, 2); // jangan memperbesar lebih dari 2x: piksel palsu hanya bikin pecah
   exportR.hq = scale > 1.02;
   let w = pw * scale, h = ph * scale;
   const maxSide = Math.min(exportR.maxSize, 8192), maxArea = 16e6;
   const k = Math.min(1, maxSide / Math.max(w, h), Math.sqrt(maxArea / (w * h)));
   w = Math.max(2, Math.round(w * k)); h = Math.max(2, Math.round(h * k));
-  exportR.draw(src, rect, w, h, S.params, mirror, sw > w * 1.5);
+  exportR.draw(src, rect, w, h, params, mirror, sw > w * 1.5);
+  const plain = params.frame === 'none' && !(params.pat && PATTERNS[params.pat]) && !(params.deco && DECO[params.deco]) && !params.date;
+  if (plain) return exportR.canvas; // simpan langsung dari canvas WebGL, tanpa salinan besar
   const out = document.createElement('canvas');
-  compose(out, exportR.canvas, S.params);
+  compose(out, exportR.canvas, params);
   return out;
 }
 
+// Tombol rana langsung siap lagi setelah frame "diambil"; pemrosesan berat jalan di belakang, berurutan.
 let busy = false;
+let exportChain = Promise.resolve();
+let pendingSaves = 0;
+
+async function saveShot(shot) {
+  try {
+    await new Promise((r) => setTimeout(r, 0)); // beri napas ke UI
+    const out = renderExport(shot);
+    const rw = out.width, rh = out.height;
+    const mime = shot.format === 'png' ? 'image/png' : 'image/jpeg';
+    // toBlob harus dipanggil di task yang sama dengan render WebGL (tanpa await di antaranya)
+    const blob = await new Promise((r) => out.toBlob(r, mime, 0.92));
+    if (!blob) throw new Error('Gagal membuat file');
+    addShot(blob, rw, rh);
+    if (out !== exportR.canvas) out.width = out.height = 0;
+    exportR.canvas.width = exportR.canvas.height = 1; // lepas memori GPU ukuran besar
+    ovCache = { key: '', cv: null };
+    pendingSaves--;
+    if (pendingSaves > 0) toast('Tersimpan • ' + pendingSaves + ' lagi diproses…');
+    else toast('Tersimpan ' + rw + '×' + rh + ' — tap galeri untuk unduh');
+  } catch (e) {
+    pendingSaves--;
+    console.error(e);
+    toast('Gagal menyimpan foto: ' + (e.message || e));
+  } finally {
+    if (shot.src && shot.src.close && shot.src !== S.img) shot.src.close();
+  }
+}
+
 async function capture() {
   if (busy || !glOK) return;
   if (S.mode === 'camera' && !(video.readyState >= 2 && video.videoWidth)) { toast('Kamera belum siap'); return; }
   busy = true;
   $('#btnShutter').classList.add('busy');
+  let source;
   try {
     if (S.timer > 0 && S.mode === 'camera') await countdown(S.timer);
     const f = $('#flash');
     f.classList.remove('go'); void f.offsetWidth; f.classList.add('go');
     shutterSound();
-    toast('Memproses foto…');
-    await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0))); // beri waktu UI tampil sebelum kerja berat
-    const source = await grabSource();
-    const out = renderExport(source);
-    const mime = S.format === 'png' ? 'image/png' : 'image/jpeg';
-    const blob = await new Promise((r) => out.toBlob(r, mime, 0.95));
-    if (!blob) throw new Error('Gagal membuat file');
-    const rw = out.width, rh = out.height;
-    addShot(blob, rw, rh);
-    if (source.src && source.src.close && source.src !== S.img) source.src.close();
-    out.width = out.height = 0;
-    ovCache = { key: '', cv: null }; // lepas memori layer ukuran besar
-    toast(`Tersimpan ${rw}×${rh} (sumber ${source.sw}×${source.sh}) — tap galeri untuk unduh`);
+    source = await grabSource(); // ambil frame secepatnya
   } catch (e) {
     console.error(e);
     toast('Gagal mengambil foto: ' + (e.message || e));
+    return;
   } finally {
     busy = false;
     $('#btnShutter').classList.remove('busy');
   }
+  // simpan snapshot pengaturan supaya tidak berubah kalau filter diganti saat diproses
+  const shot = { ...source, params: { ...S.params }, ratio: S.ratio, exportSize: S.exportSize, format: S.format };
+  pendingSaves++;
+  toast(pendingSaves > 1 ? 'Memproses ' + pendingSaves + ' foto…' : 'Memproses foto…');
+  exportChain = exportChain.then(() => saveShot(shot));
 }
 
 /* ---------- Galeri ---------- */
