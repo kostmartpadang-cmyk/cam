@@ -342,7 +342,7 @@ uniform float uExposure, uContrast, uSat, uTemp, uTint, uFade, uBw, uGrain, uVig
               uSharp, uBloom, uAb, uLeak, uToneAmt, uSoft;
 uniform vec3 uShadow, uHigh, uDuoA, uDuoB;
 uniform float uBulge, uSwirl, uPixel, uKaleido, uPoster, uEdge, uNeon, uGlitch, uThermal,
-              uHalf, uMfx, uWobble, uDuo, uInvert, uScan, uClock;
+              uHalf, uMfx, uWobble, uDuo, uInvert, uScan, uClock, uLite; // uLite=1: pratinjau ringan
 in vec2 vUv;
 out vec4 o;
 
@@ -416,28 +416,39 @@ void main(){
 
   // sharpen / soft
   if (uSharp > 0.0) {
-    vec3 blur = (tex(vUv + vec2(uPx.x, 0.0)) + tex(vUv - vec2(uPx.x, 0.0))
-               + tex(vUv + vec2(0.0, uPx.y)) + tex(vUv - vec2(0.0, uPx.y))) * 0.25;
+    vec3 blur;
+    if (uLite > 0.5) {  // pratinjau: 2 sampel
+      blur = (tex(vUv + uPx * 0.7) + tex(vUv - uPx * 0.7)) * 0.5;
+    } else {            // hasil foto: 4 sampel
+      blur = (tex(vUv + vec2(uPx.x, 0.0)) + tex(vUv - vec2(uPx.x, 0.0))
+            + tex(vUv + vec2(0.0, uPx.y)) + tex(vUv - vec2(0.0, uPx.y))) * 0.25;
+    }
     col += (col - blur) * uSharp * 1.6;
   }
   if (uSoft > 0.0) {
+    int n = uLite > 0.5 ? 3 : 6;
+    float stp = 6.2831853 / float(n);
     vec3 wide = vec3(0.0);
     for (int i = 0; i < 6; i++) {
-      float a = float(i) * 1.047198;
+      if (i >= n) break;
+      float a = float(i) * stp;
       wide += tex(vUv + vec2(cos(a) / uAspect, sin(a)) * 0.006);
     }
-    col = mix(col, wide / 6.0, uSoft);
+    col = mix(col, wide / float(n), uSoft);
   }
 
-  // bloom (highlight glow) — 8 sampel, radius bergantian
+  // bloom (highlight glow) — pratinjau 4 sampel, hasil foto 8 sampel
   if (uBloom > 0.0) {
+    int n = uLite > 0.5 ? 4 : 8;
+    float stp = 6.2831853 / float(n);
     vec3 b = vec3(0.0);
     for (int i = 0; i < 8; i++) {
-      float a = float(i) * 0.785398 + 0.3;
+      if (i >= n) break;
+      float a = float(i) * stp + 0.3;
       float rad = (i % 2 == 0) ? 0.010 : 0.024;
       b += max(tex(vUv + vec2(cos(a) / uAspect, sin(a)) * rad) - 0.62, 0.0);
     }
-    col += b / 8.0 * uBloom * 2.4;
+    col += b / float(n) * uBloom * 2.4;
   }
 
   // tone dasar
@@ -492,11 +503,17 @@ void main(){
   }
   if (uEdge > 0.0 || uNeon > 0.0) {
     vec2 sp = uPx * 1.6;
-    float e0 = lumAt(vUv + vec2(-sp.x, -sp.y)), e1 = lumAt(vUv + vec2(0.0, -sp.y)), e2 = lumAt(vUv + vec2(sp.x, -sp.y));
-    float e3 = lumAt(vUv + vec2(-sp.x, 0.0)),                                          e5 = lumAt(vUv + vec2(sp.x, 0.0));
-    float e6 = lumAt(vUv + vec2(-sp.x, sp.y)),  e7 = lumAt(vUv + vec2(0.0, sp.y)),  e8 = lumAt(vUv + vec2(sp.x, sp.y));
-    float gx = -e0 - 2.0 * e3 - e6 + e2 + 2.0 * e5 + e8;
-    float gy = -e0 - 2.0 * e1 - e2 + e6 + 2.0 * e7 + e8;
+    float gx, gy;
+    if (uLite > 0.5) {  // pratinjau: beda silang 4 sampel
+      gx = (lumAt(vUv + vec2(sp.x, 0.0)) - lumAt(vUv - vec2(sp.x, 0.0))) * 2.0;
+      gy = (lumAt(vUv + vec2(0.0, sp.y)) - lumAt(vUv - vec2(0.0, sp.y))) * 2.0;
+    } else {            // hasil foto: Sobel 8 sampel
+      float e0 = lumAt(vUv + vec2(-sp.x, -sp.y)), e1 = lumAt(vUv + vec2(0.0, -sp.y)), e2 = lumAt(vUv + vec2(sp.x, -sp.y));
+      float e3 = lumAt(vUv + vec2(-sp.x, 0.0)),                                          e5 = lumAt(vUv + vec2(sp.x, 0.0));
+      float e6 = lumAt(vUv + vec2(-sp.x, sp.y)),  e7 = lumAt(vUv + vec2(0.0, sp.y)),  e8 = lumAt(vUv + vec2(sp.x, sp.y));
+      gx = -e0 - 2.0 * e3 - e6 + e2 + 2.0 * e5 + e8;
+      gy = -e0 - 2.0 * e1 - e2 + e6 + 2.0 * e7 + e8;
+    }
     float edge = smoothstep(0.12, 0.45, length(vec2(gx, gy)));
     col = mix(col, vec3(0.05), edge * uEdge);
     if (uNeon > 0.0) {
@@ -600,6 +617,7 @@ class Renderer {
     gl.uniform1f(this.u('uAspect'), w / h);
     for (const k in UNIFORMS) gl.uniform1f(this.u(UNIFORMS[k]), p[k]);
     gl.uniform1f(this.u('uClock'), (performance.now() / 1000) % 1000);
+    gl.uniform1f(this.u('uLite'), this.lite ? 1 : 0);
     gl.uniform3fv(this.u('uDuoA'), p.duoA);
     gl.uniform3fv(this.u('uDuoB'), p.duoB);
     gl.uniform3fv(this.u('uShadow'), p.shadow);
@@ -623,11 +641,12 @@ const S = {
   mirror: true,
   grid: false,
   sensor: matchMedia('(pointer:coarse)').matches && 'ImageCapture' in window,
+  eco: matchMedia('(pointer:coarse)').matches, // mode hemat: pratinjau 640 px, 24 fps
   sound: true,
   timer: 0,
   dirty: true,
 };
-const SAVED_KEYS = ['camRes', 'exportSize', 'format', 'ratio', 'mirror', 'grid', 'sensor', 'sound', 'facing'];
+const SAVED_KEYS = ['camRes', 'exportSize', 'format', 'ratio', 'mirror', 'grid', 'sensor', 'sound', 'facing', 'eco'];
 try {
   const sv = JSON.parse(localStorage.getItem('camawa') || '{}');
   SAVED_KEYS.forEach((k) => { if (k in sv) S[k] = sv[k]; });
@@ -756,8 +775,8 @@ function overlayLayer(p, w, h) {
 
 /* ---------- Loop pratinjau ---------- */
 // Resolusi pratinjau menyesuaikan diri: turun otomatis kalau perangkat kewalahan.
-const PERF = { max: matchMedia('(pointer:coarse)').matches ? 960 : 1280, last: 0, ema: 16, calm: 0, cool: 0 };
-const PERF_CEIL = PERF.max;
+const perfCeil = () => (S.eco ? 640 : matchMedia('(pointer:coarse)').matches ? 960 : 1280);
+const PERF = { max: perfCeil(), last: 0, drawn: 0, ema: 16, calm: 0, cool: 0 };
 let newFrame = true;
 const hasRVFC = 'requestVideoFrameCallback' in HTMLVideoElement.prototype;
 if (hasRVFC) {
@@ -774,8 +793,8 @@ function tunePerf(now) {
     PERF.max = Math.max(480, Math.round(PERF.max * 0.8));
     PERF.ema = 20; PERF.calm = 0; PERF.cool = now + 1500;
   } else if (PERF.ema < 19) {
-    if (++PERF.calm > 400 && PERF.max < PERF_CEIL) { // ~6 detik stabil -> naikkan pelan-pelan
-      PERF.max = Math.min(PERF_CEIL, Math.round(PERF.max * 1.15));
+    if (++PERF.calm > 400 && PERF.max < perfCeil()) { // ~6 detik stabil -> naikkan pelan-pelan
+      PERF.max = Math.min(perfCeil(), Math.round(PERF.max * 1.15));
       PERF.calm = 0; PERF.cool = now + 1500;
     }
   } else PERF.calm = 0;
@@ -795,6 +814,8 @@ function frame(now) {
     src = S.img;
   }
   if (!src) return;
+  if (S.eco && S.mode === 'camera' && !S.dirty && now - PERF.drawn < 40) return; // mode hemat: maks ~24 fps
+  PERF.drawn = now;
   newFrame = false;
   S.dirty = false;
   const [sw, sh] = srcSize();
@@ -805,7 +826,15 @@ function frame(now) {
   try {
     // mipmap hanya untuk foto diam; untuk video terlalu mahal tiap frame
     previewR.draw(src, rect, w, h, S.params, mirror, S.mode === 'image' && sw > w * 1.6);
-    compose(view, previewR.canvas, S.params);
+    // tanpa bingkai/overlay: tampilkan canvas WebGL langsung (hemat satu salinan per frame)
+    const p = S.params, gc = previewR.canvas;
+    const plain = p.frame === 'none' && !(p.pat && PATTERNS[p.pat]) && !(p.deco && DECO[p.deco]) && !p.date;
+    if (plain) {
+      gc.hidden = false; view.hidden = true;
+    } else {
+      compose(view, gc, p);
+      view.hidden = false; gc.hidden = true;
+    }
   } catch (e) { console.error(e); }
 }
 
@@ -1092,7 +1121,8 @@ function buildUI() {
   };
   bind('#setCamRes', 'camRes'); bind('#setExport', 'exportSize'); bind('#setFormat', 'format');
   bind('#setRatio', 'ratio'); bind('#setMirror', 'mirror', 'check'); bind('#setGrid', 'grid', 'check');
-  bind('#setSensor', 'sensor', 'check'); bind('#setSound', 'sound', 'check');
+  bind('#setSensor', 'sensor', 'check'); bind('#setSound', 'sound', 'check'); bind('#setEco', 'eco', 'check');
+  $('#setEco').addEventListener('change', () => { PERF.max = perfCeil(); });
   $('#setGrid').addEventListener('change', () => $('#grid').classList.toggle('on', S.grid));
   $('#grid').classList.toggle('on', S.grid);
   $('#setDate').onchange = (e) => { S.params.date = e.target.checked; S.dirty = true; };
@@ -1178,7 +1208,12 @@ function buildUI() {
   buildUI();
   applyPreset(1); // mulai dengan Digicam 2000s
   try {
-    previewR = new Renderer(document.createElement('canvas'));
+    const gc = document.createElement('canvas');
+    gc.className = 'view';
+    gc.hidden = true;
+    $('#stage').insertBefore(gc, $('#grid'));
+    previewR = new Renderer(gc);
+    previewR.lite = true; // shader pratinjau lebih ringan; ekspor tetap kualitas penuh
   } catch (e) {
     glOK = false;
     showMsg('Browser ini belum mendukung WebGL2, yang dibutuhkan untuk filter. Coba Chrome, Edge, Firefox, atau Safari versi terbaru.');
