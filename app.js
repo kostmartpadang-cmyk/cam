@@ -1167,7 +1167,7 @@ async function renderToBlob(shot) {
   }
 }
 
-const SIZE_LABEL = { uhd: 'Ultra HD', fhd: 'Full HD', orig: 'resolusi penuh' };
+const SIZE_LABEL = { uhd: 'Ultra HD', fhd: 'Full HD', orig: 'resolusi penuh', gallery: 'ukuran cepat' };
 
 // Foto galeri dibuat ringan (cepat). Sumber aslinya disimpan supaya Ultra HD bisa dibuat saat diunduh.
 async function saveShot(shot) {
@@ -1180,14 +1180,18 @@ async function saveShot(shot) {
     }
     addShot(r.blob, r.w, r.h, keep);
     const added = shots[shots.length - 1];
+    const fast = S.exportSize === 'gallery';
     if (S.autoSave) {
-      if (keep) { added.auto = true; autoPending++; updateSaving(); } // Ultra HD disiapkan lalu diunduh otomatis
-      else { saveToDevice(added, { blob: added.blob, url: added.url }); } // tanpa sumber: unduh versi galeri
+      if (keep && !fast) { added.auto = true; autoPending++; updateSaving(); } // Ultra HD disiapkan lalu diunduh otomatis
+      else { // mode Cepat (atau tanpa sumber): langsung unduh versi galeri
+        saveToDevice(added, { blob: added.blob, url: added.url });
+        toast('Tersimpan di HP ' + added.w + '×' + added.h);
+      }
     }
-    queueHD(added);
+    if (!fast) queueHD(added);
     pendingSaves--;
     if (pendingSaves > 0) toast('Tersimpan • ' + pendingSaves + ' lagi diproses…');
-    else if (!S.autoSave) toast('Tersimpan — ' + SIZE_LABEL[S.exportSize] + ' dibuat saat diunduh');
+    else if (!S.autoSave && S.exportSize !== 'gallery') toast('Tersimpan — ' + SIZE_LABEL[S.exportSize] + ' dibuat saat diunduh');
   } catch (e) {
     pendingSaves--;
     console.error(e);
@@ -1289,7 +1293,7 @@ function hideLoading() { $('#loading').hidden = true; }
 // Satu pekerjaan per ukuran: bila sudah disiapkan di latar belakang, tombol Unduh langsung memakainya.
 function hdBlobFor(s) {
   const target = S.exportSize;
-  if (!s.source) return Promise.resolve({ blob: s.blob, w: s.w, h: s.h, url: s.url, target });
+  if (!s.source || target === 'gallery') return Promise.resolve({ blob: s.blob, w: s.w, h: s.h, url: s.url, target });
   s.jobs = s.jobs || {};
   if (s.jobs[target]) return s.jobs[target];
   const job = new Promise((resolve, reject) => {
