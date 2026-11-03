@@ -616,6 +616,7 @@ const S = {
   grid: false,
   sensor: false, // kualitas maksimal (lebih lambat) — opsional di Pengaturan
   eco: matchMedia('(pointer:coarse)').matches, // mode hemat: pratinjau 720 px, 24 fps
+  vidRes: '720', vidAudio: true, shootMode: 'foto',
   autoSave: true, // otomatis unduh ke HP setelah jepret
   date: true, // cap tanggal pada foto (bisa dimatikan langsung di layar kamera)
   dateStyle: 'minimal',
@@ -624,7 +625,7 @@ const S = {
   timer: 0,
   dirty: true,
 };
-const SAVED_KEYS = ['camRes', 'exportSize', 'format', 'ratio', 'mirror', 'grid', 'sensor', 'sound', 'facing', 'eco', 'date', 'dateStyle', 'autoSave'];
+const SAVED_KEYS = ['camRes', 'exportSize', 'format', 'ratio', 'mirror', 'grid', 'sensor', 'sound', 'facing', 'eco', 'date', 'dateStyle', 'autoSave', 'vidRes', 'vidAudio'];
 try {
   const sv = JSON.parse(localStorage.getItem('camawa4') || '{}');
   SAVED_KEYS.forEach((k) => { if (k in sv) S[k] = sv[k]; });
@@ -836,6 +837,7 @@ if (hasRVFC) {
 }
 
 function tunePerf(now) {
+  if (REC.on) { PERF.last = now; return; }
   const dt = Math.min(100, now - PERF.last);
   PERF.last = now;
   if (document.hidden || dt <= 0 || PERF.cool > now || exportBusy) return;
@@ -914,6 +916,7 @@ function frame(now) {
       view.hidden = false; gc.hidden = true; ovl.hidden = true;
     }
     fitView();
+    if (REC.on) recDraw(p, gc);
   } catch (e) { console.error(e); }
 }
 
@@ -991,6 +994,125 @@ async function flipCamera() {
   S.facing = S.facing === 'user' ? 'environment' : 'user';
   saveSettings();
   await startCamera();
+}
+
+/* ---------- Rekam video ---------- */
+const REC = { on: false, mr: null, chunks: [], c: null, x: null, t0: 0, timer: 0, mic: null, lock: null, mime: '', ext: 'webm' };
+const VID = { '720': 1280, '1080': 1920 };
+
+function pickMime() {
+  const list = ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+  for (const m of list) { try { if (MediaRecorder.isTypeSupported(m)) return m; } catch (e) { /* lanjut */ } }
+  return '';
+}
+
+// salin satu frame (canvas WebGL + lapisan stiker/tanggal, atau hasil bingkai) ke canvas rekam
+function recDraw(p, gc) {
+  const x = REC.x, c = REC.c;
+  const src = p.frame === 'none' ? gc : view;
+  x.drawImage(src, 0, 0, c.width, c.height);
+  if (p.frame === 'none' && !ovl.hidden) x.drawImage(ovl, 0, 0, c.width, c.height);
+}
+
+function recTick() {
+  if (!REC.on) return;
+  const sec = Math.floor((performance.now() - REC.t0) / 1000);
+  $('#recTime').textContent = String(Math.floor(sec / 60)).padStart(2, '0') + ':' + String(sec % 60).padStart(2, '0');
+  REC.timer = setTimeout(recTick, 500);
+}
+
+async function startRecording() {
+  if (REC.on || !glOK) return;
+  if (S.mode !== 'camera' || !(video.readyState >= 2 && video.videoWidth)) { toast('Kamera belum siap'); return; }
+  if (typeof MediaRecorder === 'undefined') { toast('Browser ini belum mendukung rekam video'); return; }
+  const mime = pickMime();
+  // ukuran rekaman tetap (genap) sesuai bentuk pratinjau
+  const [sw, sh] = srcSize();
+  const { pw, ph } = cropInfo(sw, sh);
+  const L = VID[S.vidRes] || 1280, sc = L / Math.max(pw, ph);
+  const w = Math.round(pw * sc / 2) * 2, h = Math.round(ph * sc / 2) * 2;
+  REC.c = document.createElement('canvas'); REC.c.width = w; REC.c.height = h;
+  REC.x = REC.c.getContext('2d', { alpha: false });
+  PERF.max = L; // pratinjau dirender pada ukuran rekaman, dikunci selama merekam
+  // kamera: kunci 30 fps + minta stabilisasi bawaan perangkat bila ada
+  try { await track.applyConstraints({ frameRate: { ideal: 30, max: 30 }, advanced: [{ videoStabilizationMode: 'cinematic' }, { videoStabilizationMode: 'auto' }] }); } catch (e) { /* tidak didukung */ }
+  // suara (opsional): jika izin ditolak, video tetap direkam tanpa suara
+  REC.mic = null;
+  if (S.vidAudio) {
+    try { REC.mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false }); }
+    catch (e) { toast('Tanpa suara (izin mikrofon tidak diberikan)'); }
+  }
+  const out = REC.c.captureStream(30);
+  if (REC.mic) REC.mic.getAudioTracks().forEach((t) => out.addTrack(t));
+  const opts = { videoBitsPerSecond: L >= 1920 ? 8e6 : 4e6, audioBitsPerSecond: 128e3 };
+  if (mime) opts.mimeType = mime;
+  try { REC.mr = new MediaRecorder(out, opts); } catch (e) { REC.mr = new MediaRecorder(out); }
+  REC.mime = REC.mr.mimeType || mime || 'video/webm';
+  REC.ext = REC.mime.includes('mp4') ? 'mp4' : 'webm';
+  REC.chunks = [];
+  REC.mr.ondataavailable = (e) => { if (e.data && e.data.size) REC.chunks.push(e.data); };
+  REC.mr.onstop = finishRecording;
+  S.dirty = true;
+  REC.on = true;
+  recDraw(S.params, previewR.canvas);
+  REC.mr.start(1000);
+  try { if (navigator.wakeLock) REC.lock = await navigator.wakeLock.request('screen'); } catch (e) { /* abaikan */ }
+  REC.t0 = performance.now();
+  document.body.classList.add('recording');
+  $('#recTime').textContent = '00:00';
+  $('#recBadge').hidden = false;
+  recTick();
+}
+
+function stopRecording() {
+  if (!REC.on) return;
+  REC.on = false;
+  clearTimeout(REC.timer);
+  document.body.classList.remove('recording');
+  $('#recBadge').hidden = true;
+  try { REC.mr.stop(); } catch (e) { finishRecording(); }
+}
+
+async function finishRecording() {
+  if (REC.lock) { try { REC.lock.release(); } catch (e) { /* abaikan */ } REC.lock = null; }
+  if (REC.mic) { REC.mic.getTracks().forEach((t) => t.stop()); REC.mic = null; }
+  PERF.max = perfCeil();
+  const dur = performance.now() - REC.t0;
+  if (!REC.chunks.length) { toast('Rekaman kosong'); return; }
+  const blob = new Blob(REC.chunks, { type: REC.mime.split(';')[0] });
+  REC.chunks = [];
+  // gambar mini untuk galeri
+  const tc = document.createElement('canvas');
+  tc.width = 320; tc.height = Math.round(320 * REC.c.height / REC.c.width);
+  tc.getContext('2d').drawImage(REC.c, 0, 0, tc.width, tc.height);
+  const thumb = await new Promise((r) => tc.toBlob(r, 'image/jpeg', 0.7));
+  const shot = { blob, w: REC.c.width, h: REC.c.height, source: null, hd: null, isVideo: true, dur,
+    url: URL.createObjectURL(blob), thumb: URL.createObjectURL(thumb),
+    name: 'cam-awa-' + stamp() + '.' + REC.ext };
+  shots.push(shot);
+  refreshThumb();
+  if (S.autoSave) { saveToDevice(shot, { blob, url: shot.url }); toast('Video tersimpan di HP (' + (blob.size / 1048576).toFixed(1) + ' MB)'); }
+  else toast('Video tersimpan di galeri');
+}
+
+async function onShutter() {
+  if (S.shootMode !== 'video') { capture(); return; }
+  if (REC.on) { stopRecording(); return; }
+  if (busy) return;
+  busy = true;
+  try {
+    if (S.timer > 0) await countdown(S.timer);
+    await startRecording();
+  } finally { busy = false; }
+}
+
+function setShootMode(m) {
+  if (REC.on) return;
+  S.shootMode = m;
+  document.body.classList.toggle('vidmode', m === 'video');
+  $('#mdFoto').classList.toggle('on', m === 'foto');
+  $('#mdVideo').classList.toggle('on', m === 'video');
+  $('#btnShutter').setAttribute('aria-label', m === 'video' ? 'Mulai rekam' : 'Ambil foto');
 }
 
 /* ---------- Ambil foto ---------- */
@@ -1229,7 +1351,7 @@ function addShot(blob, w, h, source) {
 }
 function refreshThumb() {
   const last = shots[shots.length - 1];
-  $('#thumbImg').src = last ? last.url : '';
+  $('#thumbImg').src = last ? (last.thumb || last.url) : '';
   if (!last) $('#thumbImg').removeAttribute('src');
   $('#thumbCount').textContent = shots.length || '';
 }
@@ -1237,8 +1359,11 @@ function openViewer(i) {
   if (!shots.length) { toast('Belum ada foto'); return; }
   viewIdx = (i + shots.length) % shots.length;
   const s = shots[viewIdx];
-  $('#viewerImg').src = s.url;
-  $('#viewerInfo').textContent = `${viewIdx + 1}/${shots.length} • ${s.w}×${s.h} • ${(s.blob.size / 1048576).toFixed(1)} MB`;
+  const vv = $('#viewerVid'), vi = $('#viewerImg');
+  vv.pause();
+  if (s.isVideo) { vi.hidden = true; vv.hidden = false; vv.src = s.url; }
+  else { vv.hidden = true; vv.removeAttribute('src'); vi.hidden = false; vi.src = s.url; }
+  $('#viewerInfo').textContent = `${viewIdx + 1}/${shots.length} • ${s.isVideo ? 'Video ' : ''}${s.w}×${s.h} • ${(s.blob.size / 1048576).toFixed(1)} MB`;
   $('#viewer').hidden = false;
 }
 function download(s) {
@@ -1320,11 +1445,20 @@ async function pumpHD() {
 }
 
 let dlBusy = false;
+async function exportVideo(s, mode) {
+  if (mode === 'share') {
+    const file = new File([s.blob], s.name, { type: s.blob.type });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file], title: 'Cam-Awa' }); } catch (e) { /* dibatalkan */ } }
+    else toast('Berbagi tidak didukung, gunakan Unduh');
+  } else { saveToDevice(s, { blob: s.blob, url: s.url }); toast('Video diunduh'); }
+}
+
 async function exportCurrent(mode) {
   if (dlBusy) return;
   const s = shots[viewIdx];
   if (!s) return;
   dlBusy = true;
+  if (s.isVideo) { dlBusy = false; return exportVideo(s, mode); }
   showLoading(s.source ? 'Menyiapkan foto ' + SIZE_LABEL[S.exportSize] + '…' : 'Menyiapkan foto…');
   try {
     await new Promise((r) => setTimeout(r, 60)); // biarkan layar loading tampil dulu
@@ -1459,8 +1593,14 @@ function buildUI() {
   $('#setFrame').onchange = (e) => { S.params.frame = e.target.value; S.dirty = true; };
 
   // tombol
-  $('#btnShutter').onclick = capture;
-  $('#btnFlip').onclick = () => { if (S.mode === 'camera') flipCamera(); else toast('Kembali ke kamera dulu'); };
+  $('#btnShutter').onclick = onShutter;
+  $('#mdFoto').onclick = () => setShootMode('foto');
+  $('#mdVideo').onclick = () => setShootMode('video');
+  $('#setVidRes').value = S.vidRes;
+  $('#setVidRes').onchange = (e) => { S.vidRes = e.target.value; saveSettings(); };
+  $('#setVidAudio').checked = S.vidAudio;
+  $('#setVidAudio').onchange = (e) => { S.vidAudio = e.target.checked; saveSettings(); };
+  $('#btnFlip').onclick = () => { if (REC.on) { toast('Hentikan rekaman dulu'); return; } if (S.mode === 'camera') flipCamera(); else toast('Kembali ke kamera dulu'); };
   $('#btnTimer').onclick = () => {
     S.timer = S.timer === 0 ? 3 : S.timer === 3 ? 10 : 0;
     $('#timerLabel').textContent = S.timer;
@@ -1499,7 +1639,7 @@ function buildUI() {
   $('#btnAdjust').onclick = () => sheet('#adjust');
   $('#btnSettings').onclick = () => sheet('#settings');
   document.querySelectorAll('[data-close]').forEach((b) => {
-    b.onclick = () => { $('#adjust').hidden = true; $('#settings').hidden = true; $('#viewer').hidden = true; };
+    b.onclick = () => { $('#viewerVid').pause(); $('#adjust').hidden = true; $('#settings').hidden = true; $('#viewer').hidden = true; };
   });
 
   $('#btnGallery').onclick = () => openViewer(shots.length - 1);
@@ -1511,6 +1651,8 @@ function buildUI() {
     const s = shots.splice(viewIdx, 1)[0];
     releaseSource(s);
     URL.revokeObjectURL(s.url);
+    if (s.thumb) URL.revokeObjectURL(s.thumb);
+    $('#viewerVid').pause();
     refreshThumb();
     if (!shots.length) $('#viewer').hidden = true; else openViewer(Math.min(viewIdx, shots.length - 1));
   };
@@ -1525,7 +1667,7 @@ function buildUI() {
     }
   });
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) { if (S.mode === 'camera') stopCamera(); }
+    if (document.hidden) { stopRecording(); if (S.mode === 'camera') stopCamera(); }
     else if (S.mode === 'camera' && !stream) startCamera();
   });
 }

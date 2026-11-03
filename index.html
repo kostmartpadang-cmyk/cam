@@ -33,6 +33,7 @@
       </div>
     </div>
     <button class="back-cam" id="btnBackCam" hidden>← Kembali ke kamera</button>
+    <div id="recBadge" class="rec-badge" hidden><i></i><span id="recTime">00:00</span></div>
     <div class="date-pills">
       <button class="pill" id="btnDate" aria-label="Sertakan tanggal di foto"><svg data-i="calendar"></svg><span>Tanggal</span></button>
       <button class="pill" id="btnDateStyle" aria-label="Ganti gaya tanggal"></button>
@@ -43,6 +44,7 @@
     <div class="tabs" id="tabs"></div>
     <div class="filters" id="filters" role="listbox" aria-label="Filter"></div>
 
+    <div class="modes"><button id="mdFoto" class="on">Foto</button><button id="mdVideo">Video</button></div>
     <div class="bar">
       <button class="thumb-btn" id="btnGallery" aria-label="Galeri"><img id="thumbImg" alt=""><span id="thumbCount"></span></button>
       <button class="icon-btn" id="btnTimer" aria-label="Timer"><svg class="i" data-i="clock"></svg><b id="timerLabel">0</b></button>
@@ -107,6 +109,10 @@
       </select>
     </label>
     <label class="check"><input type="checkbox" id="setAuto"> Simpan otomatis ke HP setelah jepret <small>(file langsung terunduh tanpa menekan Unduh; browser mungkin meminta izin "unduh beberapa file" sekali)</small></label>
+    <label>Kualitas video
+      <select id="setVidRes"><option value="720">HD 720p — paling stabil &amp; ringan</option><option value="1080">Full HD 1080p</option></select>
+    </label>
+    <label class="check"><input type="checkbox" id="setVidAudio"> Rekam suara (video) <small>(meminta izin mikrofon saat mulai merekam)</small></label>
     <label class="check"><input type="checkbox" id="setEco"> Mode hemat <small>(pratinjau lebih kecil &amp; 24 fps agar lancar; hasil foto tetap kualitas penuh)</small></label>
     <label class="check"><input type="checkbox" id="setDate"> Sertakan tanggal di foto</label>
     <label>Gaya tanggal
@@ -132,7 +138,7 @@
     <span id="viewerInfo"></span>
     <button class="icon-btn" data-close aria-label="Tutup"><svg class="i" data-i="x"></svg></button>
   </div>
-  <div class="viewer-img"><img id="viewerImg" alt="Hasil foto"></div>
+  <div class="viewer-img"><img id="viewerImg" alt="Hasil foto"><video id="viewerVid" controls playsinline hidden></video></div>
   <div class="viewer-bar">
     <button class="btn ghost" id="vPrev">‹</button>
     <button class="btn" id="vDownload"><svg class="i" data-i="download"></svg> Unduh</button>

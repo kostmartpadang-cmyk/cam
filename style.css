@@ -151,3 +151,17 @@ input[type=range]{width:100%;accent-color:var(--accent);height:24px}
 .tabs{overflow-x:auto;scrollbar-width:none}
 .tabs::-webkit-scrollbar{display:none}
 .tab{flex:none}
+
+/* mode foto / video */
+.modes{display:flex;justify-content:center;gap:6px;padding:6px 0 0}
+.modes button{padding:5px 16px;border-radius:999px;font-size:13px;color:var(--text);opacity:.65}
+.modes button.on{background:var(--accent);color:var(--accent-ink);opacity:1;font-weight:600}
+body.vidmode .shutter{border-color:#ff3b4a}
+body.vidmode .shutter i{background:#ff3b4a;transition:border-radius .15s,transform .15s}
+body.recording .shutter i{border-radius:12px;transform:scale(.55)}
+body.recording .modes,body.recording #btnOpen,body.recording #btnFlip{opacity:.35;pointer-events:none}
+.rec-badge{position:absolute;left:10px;top:10px;z-index:3;display:flex;align-items:center;gap:7px;padding:6px 12px;border-radius:999px;
+  background:rgba(0,0,0,.6);font-size:13px;font-variant-numeric:tabular-nums;color:#fff}
+.rec-badge i{width:9px;height:9px;border-radius:50%;background:#ff3b4a;animation:recblink 1s infinite}
+@keyframes recblink{50%{opacity:.2}}
+#viewerVid{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
