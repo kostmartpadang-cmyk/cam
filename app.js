@@ -285,6 +285,14 @@ function drawPattern(ctx, name, w, h) {
   }
 }
 PRESETS.forEach((p) => { p.c = p.c || 'Klasik'; });
+// Tampilan lebih bersih: grain dikecilkan banyak, pudar & vignette dibuat lebih halus.
+// (Nilainya tetap bisa dinaikkan lewat slider "Atur Filter".)
+PRESETS.forEach((pr) => {
+  const q = pr.p;
+  q.grain = 0; // tanpa grain sama sekali
+  if (q.fade) q.fade = +(q.fade * 0.7).toFixed(3);
+  if (q.vig) q.vig = +(q.vig * 0.75).toFixed(3);
+});
 
 const DECO = {
   sparkle: ['✨', '⭐', '✨'],
@@ -305,7 +313,6 @@ const SLIDERS = [
   ['temp', 'Hangat/Dingin', -1, 1, 0.01],
   ['tint', 'Tint (hijau)', -1, 1, 0.01],
   ['fade', 'Pudar', 0, 1, 0.01],
-  ['grain', 'Grain', 0, 1, 0.01],
   ['vig', 'Vignette', 0, 1, 0.01],
   ['sharp', 'Ketajaman', 0, 2, 0.01],
   ['bloom', 'Bloom/Glow', 0, 1, 0.01],
