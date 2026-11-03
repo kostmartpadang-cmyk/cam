@@ -203,9 +203,28 @@ const PRESETS = [
   { c: 'Lucu', e: '🔴', name: 'Sinema Merah', sw: ['#000', '#ff5a4d'], p: {
       duo: 0.9, duoA: [0, 0, 0], duoB: [1, 0.35, 0.3], contrast: 1.2 } },
 
+  /* ===== Warna-warni (ringan: hanya pengolahan warna) ===== */
+  { c: 'Warna', e: '🌈', name: 'Pelangi Cerah', sw: ['#ff6a8a', '#4ad0ff'], p: { sat: 1.5, contrast: 1.1, sharp: 0.6 } },
+  { c: 'Warna', e: '🍥', name: 'Cotton Candy', sw: ['#ffc4dc', '#bcd8ff'], p: { duo: 0.45, duoA: [0.45, 0.5, 0.8], duoB: [1, 0.8, 0.9], sat: 1.2, contrast: 1.05, sharp: 0.5, exposure: 0.1, sat: 1.0 } },
+  { c: 'Warna', e: '🦩', name: 'Flamingo', sw: ['#ffb0c8', '#e8508a'], p: { duo: 0.5, duoA: [0.5, 0.1, 0.3], duoB: [1, 0.7, 0.8], sat: 1.2, contrast: 1.05, sharp: 0.5 } },
+  { c: 'Warna', e: '🌊', name: 'Biru Laut', sw: ['#7ad8ff', '#0a5a9a'], p: { duo: 0.5, duoA: [0, 0.1, 0.35], duoB: [0.5, 0.9, 1], sat: 1.2, contrast: 1.05, sharp: 0.5 } },
+  { c: 'Warna', e: '🐸', name: 'Hijau Neon', sw: ['#a8ff5a', '#1a8a3a'], p: { duo: 0.5, duoA: [0, 0.2, 0.05], duoB: [0.7, 1, 0.4], sat: 1.2, contrast: 1.05, sharp: 0.5 } },
+  { c: 'Warna', e: '🍋', name: 'Kuning Lemon', sw: ['#fff27a', '#e8b800'], p: { duo: 0.5, duoA: [0.2, 0.15, 0], duoB: [1, 0.95, 0.4], sat: 1.2, contrast: 1.05, sharp: 0.5 } },
+  { c: 'Warna', e: '🍊', name: 'Oranye Jeruk', sw: ['#ffb050', '#e86a00'], p: { duo: 0.5, duoA: [0.25, 0.05, 0], duoB: [1, 0.7, 0.3], sat: 1.2, contrast: 1.05, sharp: 0.5 } },
+  { c: 'Warna', e: '🍒', name: 'Merah Cherry', sw: ['#ff5a6a', '#9a0a2a'], p: { duo: 0.5, duoA: [0.2, 0, 0.05], duoB: [1, 0.4, 0.45], sat: 1.2, contrast: 1.05, sharp: 0.5 } },
+  { c: 'Warna', e: '🔮', name: 'Ungu Galaxy', sw: ['#b08aff', '#2a0a6a'], p: { duo: 0.5, duoA: [0.15, 0, 0.4], duoB: [0.8, 0.6, 1], sat: 1.2, contrast: 1.05, sharp: 0.5 } },
+  { c: 'Warna', e: '🧿', name: 'Tosca', sw: ['#7af0e0', '#0a7a80'], p: { duo: 0.5, duoA: [0, 0.2, 0.22], duoB: [0.5, 1, 0.95], sat: 1.2, contrast: 1.05, sharp: 0.5 } },
+  { c: 'Warna', e: '🌄', name: 'Sunrise', sw: ['#ffc07a', '#ff7a9a'], p: { duo: 0.45, duoA: [0.4, 0.1, 0.3], duoB: [1, 0.75, 0.5], sat: 1.2, contrast: 1.05, sharp: 0.5 } },
+  { c: 'Warna', e: '🍦', name: 'Ice Cream', sw: ['#fff0e0', '#ffc0d0'], p: { duo: 0.35, duoA: [0.8, 0.65, 0.75], duoB: [1, 0.97, 0.9], sat: 1.2, contrast: 1.05, sharp: 0.5, exposure: 0.15, sat: 0.95 } },
+  { c: 'Warna', e: '🥤', name: 'Soda Biru', sw: ['#9ae8ff', '#2a8ad8'], p: { duo: 0.45, duoA: [0, 0.2, 0.4], duoB: [0.7, 0.95, 1], sat: 1.2, contrast: 1.05, sharp: 0.5 } },
+  { c: 'Warna', e: '🌱', name: 'Rumput', sw: ['#b8f07a', '#3a9a2a'], p: { duo: 0.5, duoA: [0.05, 0.2, 0], duoB: [0.75, 1, 0.4], sat: 1.2, contrast: 1.05, sharp: 0.5 } },
+  { c: 'Warna', e: '🟥', name: 'Merah Biru', sw: ['#0d1a66', '#ff4d4d'], p: { duo: 1, duoA: [0.05, 0.1, 0.4], duoB: [1, 0.3, 0.3] } },
+  { c: 'Warna', e: '🍉', name: 'Semangka', sw: ['#0d4018', '#ff738c'], p: { duo: 1, duoA: [0.05, 0.25, 0.1], duoB: [1, 0.45, 0.55] } },
+  { c: 'Warna', e: '🎃', name: 'Teal Jingga', sw: ['#00333d', '#ffa64d'], p: { duo: 1, duoA: [0.0, 0.2, 0.25], duoB: [1, 0.65, 0.3] } },
+  { c: 'Warna', e: '🌻', name: 'Bunga Matahari', sw: ['#261a00', '#fff266'], p: { duo: 1, duoA: [0.15, 0.1, 0.0], duoB: [1, 0.95, 0.4] } },
 ];
 const START_PRESET = Math.max(0, PRESETS.findIndex((p) => p.name === 'Jernih Alami'));
-const TABS = ['Klasik', 'Jernih', 'Estetik', 'Lucu', 'Stiker'];
+const TABS = ['Klasik', 'Jernih', 'Estetik', 'Warna', 'Lucu', 'Stiker'];
 
 /* ---------- Pola stiker (digambar sendiri, dengan blur lembut) ---------- */
 const PATTERNS = {
@@ -832,6 +851,19 @@ function tunePerf(now) {
   } else PERF.calm = 0;
 }
 
+const ovl = $('#ovl');
+// Lapisan pola/stiker/tanggal untuk pratinjau: digambar sekali ke canvas terpisah di atas video, bukan disalin tiap frame.
+function updateOverlayEl(p, w, h) {
+  const layer = overlayLayer(p, w, h);
+  if (!layer) { ovl.hidden = true; return; }
+  if (ovl._src !== layer) {
+    ovl.width = layer.width; ovl.height = layer.height;
+    ovl.getContext('2d').drawImage(layer, 0, 0);
+    ovl._src = layer;
+  }
+  ovl.hidden = false;
+}
+
 let fitKey = '';
 function fitView() {
   const st = $('#stage'), gc = previewR.canvas;
@@ -842,7 +874,7 @@ function fitView() {
   if (key === fitKey) return;
   fitKey = key;
   const w = Math.min(cw, ch * a), h = w / a;
-  [view, gc, $('#grid'), $('#flash')].forEach((el) => { el.style.width = w + 'px'; el.style.height = h + 'px'; });
+  [view, gc, ovl, $('#grid'), $('#flash')].forEach((el) => { el.style.width = w + 'px'; el.style.height = h + 'px'; });
 }
 window.addEventListener('resize', () => { fitKey = ''; S.dirty = true; });
 
@@ -874,12 +906,12 @@ function frame(now) {
     previewR.draw(src, rect, w, h, S.params, mirror, sw > w * 1.4);
     // tanpa bingkai/overlay: tampilkan canvas WebGL langsung (hemat satu salinan per frame)
     const p = S.params, gc = previewR.canvas;
-    const plain = p.frame === 'none' && !(p.pat && PATTERNS[p.pat]) && !(p.deco && DECO[p.deco]) && !p.date;
-    if (plain) {
-      gc.hidden = false; view.hidden = true;
-    } else {
+    if (p.frame === 'none') {
+      gc.hidden = false; view.hidden = true; // tampilkan canvas WebGL langsung
+      updateOverlayEl(p, w, h);
+    } else { // bingkai Polaroid/film: perlu digabung (lebih berat)
       compose(view, gc, p);
-      view.hidden = false; gc.hidden = true;
+      view.hidden = false; gc.hidden = true; ovl.hidden = true;
     }
     fitView();
   } catch (e) { console.error(e); }
@@ -1506,7 +1538,7 @@ function buildUI() {
     const gc = document.createElement('canvas');
     gc.className = 'view';
     gc.hidden = true;
-    $('#stage').insertBefore(gc, $('#grid'));
+    $('#stage').insertBefore(gc, $('#ovl'));
     previewR = new Renderer(gc);
     previewR.lite = true; // shader pratinjau lebih ringan; ekspor tetap kualitas penuh
   } catch (e) {
