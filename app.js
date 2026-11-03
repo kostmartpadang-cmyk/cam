@@ -33,24 +33,12 @@ const BASE = {
 };
 const PRESETS = [
   { name: 'Asli', sw: ['#d9d4cc', '#7d776e'], p: {} },
-  { name: 'Digicam 2000s', sw: ['#9fd0ff', '#ff9d2e'], p: {
-      exposure: 0.12, contrast: 1.2, sat: 1.15, temp: 0.12, tint: -0.1, fade: 0.05, grain: 0.22, vig: 0.28,
-      sharp: 0.7, bloom: 0.3, ab: 0.3, toneAmt: 0.6, shadow: [0.42, 0.52, 0.72], high: [0.62, 0.56, 0.46], date: true } },
-  { name: 'CCD Y2K', sw: ['#6fb7ff', '#e6f3ff'], p: {
-      exposure: 0.1, contrast: 1.1, sat: 1.28, temp: -0.38, tint: 0.05, grain: 0.18, vig: 0.2,
-      sharp: 0.5, bloom: 0.55, ab: 0.45, toneAmt: 0.5, shadow: [0.4, 0.55, 0.72], high: [0.55, 0.58, 0.64], date: true } },
-  { name: 'Vintage Jernih', sw: ['#f0d9ae', '#a56d45'], p: {
-      exposure: 0.05, contrast: 1.08, sat: 0.92, temp: 0.35, fade: 0.17, grain: 0.1, vig: 0.3,
-      sharp: 0.55, bloom: 0.12, toneAmt: 0.55, shadow: [0.44, 0.5, 0.6], high: [0.62, 0.53, 0.4] } },
   { name: 'Kodak Gold', sw: ['#ffd36a', '#c4651f'], p: {
       contrast: 1.1, sat: 1.22, temp: 0.5, fade: 0.08, grain: 0.22, vig: 0.22, sharp: 0.4,
       toneAmt: 0.6, shadow: [0.5, 0.48, 0.45], high: [0.66, 0.55, 0.38] } },
   { name: 'Fuji Hijau', sw: ['#9ad6b0', '#2e6f5c'], p: {
       contrast: 1.12, sat: 1.12, temp: -0.1, tint: 0.4, fade: 0.06, grain: 0.2, vig: 0.2, sharp: 0.4,
       toneAmt: 0.6, shadow: [0.4, 0.55, 0.52], high: [0.55, 0.55, 0.5] } },
-  { name: 'Polaroid', sw: ['#f3efe6', '#c9a98b'], p: {
-      exposure: 0.08, contrast: 0.96, sat: 0.86, temp: 0.25, fade: 0.28, grain: 0.2, vig: 0.35, soft: 0.15, sharp: 0.2,
-      toneAmt: 0.4, shadow: [0.48, 0.52, 0.58], high: [0.58, 0.52, 0.44], frame: 'polaroid' } },
   { name: 'Sinematik', sw: ['#2f6f7e', '#e49b5a'], p: {
       contrast: 1.2, sat: 1.1, fade: 0.04, grain: 0.1, vig: 0.38, sharp: 0.45,
       toneAmt: 1.0, shadow: [0.36, 0.52, 0.62], high: [0.66, 0.5, 0.36] } },
@@ -59,12 +47,6 @@ const PRESETS = [
   { name: 'Sepia', sw: ['#e8cfa5', '#5f3d22'], p: {
       contrast: 1.12, bw: 1, fade: 0.12, grain: 0.25, vig: 0.4, toneAmt: 1.3, sharp: 0.3,
       shadow: [0.38, 0.3, 0.22], high: [0.7, 0.56, 0.4] } },
-  { name: 'Light Leak', sw: ['#ffcf8a', '#ff5a2e'], p: {
-      temp: 0.3, sat: 1.1, fade: 0.15, grain: 0.25, vig: 0.25, leak: 0.85, bloom: 0.2, sharp: 0.3,
-      toneAmt: 0.4, shadow: [0.46, 0.5, 0.58], high: [0.6, 0.52, 0.42] } },
-  { name: 'Roll Film', sw: ['#222', '#f5a623'], p: {
-      contrast: 1.12, sat: 1.15, temp: 0.35, fade: 0.08, grain: 0.3, vig: 0.28, sharp: 0.4,
-      toneAmt: 0.5, shadow: [0.46, 0.5, 0.56], high: [0.64, 0.54, 0.4], frame: 'film' } },
   { name: 'Pastel Matte', sw: ['#f6d6e0', '#a9c9e8'], p: {
       exposure: 0.15, contrast: 0.9, sat: 0.8, temp: 0.1, tint: -0.2, fade: 0.35, grain: 0.08, vig: 0.1, soft: 0.1,
       toneAmt: 0.4, shadow: [0.5, 0.48, 0.58], high: [0.6, 0.52, 0.5] } },
@@ -78,9 +60,6 @@ const PRESETS = [
   { c: 'Estetik', e: '🌫️', name: 'Moody', sw: ['#2c3b44', '#8aa0a8'], p: {
       exposure: -0.25, contrast: 1.3, sat: 0.75, temp: -0.2, fade: 0.12, vig: 0.5, grain: 0.2, sharp: 0.5,
       toneAmt: 0.8, shadow: [0.38, 0.5, 0.58], high: [0.55, 0.52, 0.5] } },
-  { c: 'Estetik', e: '📸', name: 'Disposable', sw: ['#fff1c9', '#e05a2b'], p: {
-      exposure: 0.22, contrast: 1.35, sat: 1.1, temp: 0.18, fade: 0.04, grain: 0.38, vig: 0.55, bloom: 0.35,
-      sharp: 0.5, ab: 0.2, toneAmt: 0.4, shadow: [0.46, 0.52, 0.6], high: [0.64, 0.55, 0.42], date: true } },
   { c: 'Estetik', e: '🎞️', name: 'Noir', sw: ['#f2f2f2', '#000'], p: {
       contrast: 1.55, bw: 1, vig: 0.65, grain: 0.35, fade: 0.02, sharp: 0.6 } },
   { c: 'Estetik', e: '🌃', name: 'Cyberpunk', sw: ['#ff2bd6', '#17e6ff'], p: {
@@ -88,9 +67,6 @@ const PRESETS = [
       toneAmt: 1.6, shadow: [0.62, 0.34, 0.7], high: [0.34, 0.62, 0.7] } },
   { c: 'Estetik', e: '☁️', name: 'Dreamy', sw: ['#ffe6f2', '#bcd7ff'], p: {
       exposure: 0.15, soft: 0.35, bloom: 0.75, fade: 0.14, sat: 1.1, temp: 0.1, vig: 0.15, sharp: 0 } },
-  { c: 'Estetik', e: '📼', name: 'VHS 90s', sw: ['#5a5ad0', '#d05a5a'], p: {
-      scan: 0.8, ab: 0.6, glitch: 0.25, grain: 0.4, sat: 1.25, temp: 0.08, contrast: 1.1, vig: 0.3,
-      bloom: 0.2, sharp: 0.2, date: true } },
   { c: 'Estetik', e: '🌴', name: 'Vaporwave', sw: ['#3a1a8a', '#ff8fd0'], p: {
       duo: 0.8, duoA: [0.16, 0.05, 0.42], duoB: [1, 0.62, 0.92], bloom: 0.4, scan: 0.3, contrast: 1.1, grain: 0.1 } },
   { c: 'Estetik', e: '🟩', name: 'Matrix', sw: ['#031a06', '#4dff5e'], p: {
@@ -186,6 +162,7 @@ const PRESETS = [
       exposure: 0.15, temp: 0.1, tint: -0.2, fade: 0.2, soft: 0.1, sat: 0.95, bloom: 0.25, sharp: 0.2,
       toneAmt: 0.7, shadow: [0.52, 0.46, 0.54], high: [0.68, 0.52, 0.54] } },
 ];
+const START_PRESET = Math.max(0, PRESETS.findIndex((p) => p.name === 'Jernih Alami'));
 const TABS = ['Klasik', 'Jernih', 'Estetik', 'Lucu', 'Stiker'];
 
 /* ---------- Pola stiker (digambar sendiri, dengan blur lembut) ---------- */
@@ -1099,7 +1076,7 @@ function buildUI() {
     b.onclick = () => { showTab(t); f.scrollLeft = 0; };
     tabs.appendChild(b);
   });
-  showTab(PRESETS[1].c);
+  showTab(PRESETS[START_PRESET].c);
 
   const sl = $('#sliders');
   SLIDERS.forEach(([k, label, min, max, step]) => {
@@ -1213,7 +1190,7 @@ function buildUI() {
 /* ---------- Mulai ---------- */
 (function init() {
   buildUI();
-  applyPreset(1); // mulai dengan Digicam 2000s
+  applyPreset(START_PRESET); // mulai dengan Jernih Alami
   try {
     const gc = document.createElement('canvas');
     gc.className = 'view';
