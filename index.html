@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e0d0c">
+<title>Cam-Awa — Kamera Digicam & Vintage</title>
+<meta name="description" content="Kamera web dengan filter digicam, vintage jernih, film, dan Ultra HD. Ambil foto langsung dari browser dan unduh.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23161412'/%3E%3Ccircle cx='32' cy='34' r='15' fill='none' stroke='%23ffb454' stroke-width='5'/%3E%3Ccircle cx='32' cy='34' r='6' fill='%23ffb454'/%3E%3Crect x='20' y='12' width='14' height='6' rx='2' fill='%23ffb454'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <header class="top">
+    <div class="brand">cam<span>·</span>awa <small id="resInfo"></small></div>
+    <div class="top-actions">
+      <button class="icon-btn" id="btnAdjust" aria-label="Atur filter"><svg class="i" data-i="sliders"></svg></button>
+      <button class="icon-btn" id="btnSettings" aria-label="Pengaturan"><svg class="i" data-i="settings"></svg></button>
+    </div>
+  </header>
+
+  <main class="stage" id="stage">
+    <canvas id="view"></canvas>
+    <div class="grid" id="grid"></div>
+    <div id="flash"></div>
+    <div id="count"></div>
+    <div id="msg" class="msg" hidden>
+      <p id="msgText"></p>
+      <div class="msg-actions">
+        <button class="btn" id="btnRetry">Coba lagi</button>
+        <button class="btn ghost" id="btnOpenMsg">Buka foto…</button>
+      </div>
+    </div>
+    <button class="back-cam" id="btnBackCam" hidden>← Kembali ke kamera</button>
+  </main>
+
+  <section class="panel">
+    <div class="tabs" id="tabs"></div>
+    <div class="filters" id="filters" role="listbox" aria-label="Filter"></div>
+
+    <div class="bar">
+      <button class="thumb-btn" id="btnGallery" aria-label="Galeri"><img id="thumbImg" alt=""><span id="thumbCount"></span></button>
+      <button class="icon-btn" id="btnTimer" aria-label="Timer"><svg class="i" data-i="clock"></svg><b id="timerLabel">0</b></button>
+      <button class="shutter" id="btnShutter" aria-label="Ambil foto"><i></i></button>
+      <button class="icon-btn" id="btnFlip" aria-label="Ganti kamera"><svg class="i" data-i="flip"></svg></button>
+      <button class="icon-btn" id="btnOpen" aria-label="Buka foto"><svg class="i" data-i="image"></svg></button>
+    </div>
+  </section>
+</div>
+
+<input type="file" id="file" accept="image/*" hidden>
+
+<!-- Adjust sheet -->
+<aside class="sheet" id="adjust" hidden>
+  <div class="sheet-head"><h2>Atur Filter</h2><div><button class="btn small ghost" id="btnReset">Reset</button> <button class="icon-btn" data-close aria-label="Tutup"><svg class="i" data-i="x"></svg></button></div></div>
+  <div class="sheet-body" id="sliders"></div>
+</aside>
+
+<!-- Settings sheet -->
+<aside class="sheet" id="settings" hidden>
+  <div class="sheet-head"><h2>Pengaturan</h2><button class="icon-btn" data-close aria-label="Tutup"><svg class="i" data-i="x"></svg></button></div>
+  <div class="sheet-body form">
+    <label>Resolusi kamera
+      <select id="setCamRes">
+        <option value="max">Maksimum (otomatis)</option>
+        <option value="4k">4K (3840×2160)</option>
+        <option value="fhd">Full HD (1920×1080)</option>
+        <option value="hd">HD (1280×720)</option>
+      </select>
+    </label>
+    <label>Ukuran hasil foto
+      <select id="setExport">
+        <option value="uhd">Ultra HD — sisi panjang 3840 px</option>
+        <option value="orig">Asli (resolusi sumber)</option>
+        <option value="fhd">Full HD — sisi panjang 1920 px</option>
+      </select>
+    </label>
+    <p class="hint">Ultra HD akan di-upscale halus jika sumber lebih kecil dari 4K.</p>
+    <label>Format file
+      <select id="setFormat">
+        <option value="jpeg">JPEG (ringan, kualitas 95%)</option>
+        <option value="png">PNG (tanpa kompresi, file besar)</option>
+      </select>
+    </label>
+    <label>Rasio
+      <select id="setRatio">
+        <option value="native">Asli kamera</option>
+        <option value="4:3">4:3</option>
+        <option value="3:4">3:4</option>
+        <option value="1:1">1:1 (kotak)</option>
+        <option value="3:2">3:2</option>
+        <option value="16:9">16:9</option>
+        <option value="9:16">9:16</option>
+      </select>
+    </label>
+    <label>Bingkai
+      <select id="setFrame">
+        <option value="none">Tanpa bingkai</option>
+        <option value="polaroid">Polaroid</option>
+        <option value="film">Roll film</option>
+      </select>
+    </label>
+    <label class="check"><input type="checkbox" id="setDate"> Cap tanggal ala digicam</label>
+    <label class="check"><input type="checkbox" id="setMirror"> Cerminkan kamera depan</label>
+    <label class="check"><input type="checkbox" id="setGrid"> Garis bantu (grid)</label>
+    <label class="check"><input type="checkbox" id="setSensor"> Mode sensor penuh <small>(foto resolusi tertinggi bila didukung; framing bisa sedikit beda dari pratinjau)</small></label>
+    <label class="check"><input type="checkbox" id="setSound" checked> Suara rana</label>
+  </div>
+</aside>
+
+<!-- Viewer -->
+<div class="viewer" id="viewer" hidden>
+  <div class="viewer-top">
+    <span id="viewerInfo"></span>
+    <button class="icon-btn" data-close aria-label="Tutup"><svg class="i" data-i="x"></svg></button>
+  </div>
+  <div class="viewer-img"><img id="viewerImg" alt="Hasil foto"></div>
+  <div class="viewer-bar">
+    <button class="btn ghost" id="vPrev">‹</button>
+    <button class="btn" id="vDownload"><svg class="i" data-i="download"></svg> Unduh</button>
+    <button class="btn ghost" id="vShare"><svg class="i" data-i="share"></svg></button>
+    <button class="btn ghost" id="vDelete"><svg class="i" data-i="trash"></svg></button>
+    <button class="btn ghost" id="vNext">›</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+<script src="app.js"></script>
+</body>
+</html>

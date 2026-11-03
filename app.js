@@ -1,0 +1,1134 @@
+'use strict';
+/* Cam-Awa — kamera web dengan filter WebGL2. Tanpa dependensi, tanpa build. */
+
+const $ = (s) => document.querySelector(s);
+
+/* ---------- Ikon ---------- */
+const ICONS = {
+  flip: '<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>',
+  sliders: '<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>',
+  settings: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>',
+  image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>',
+  clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+  download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
+  share: '<path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/>',
+  trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>',
+  x: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+};
+document.querySelectorAll('svg[data-i]').forEach((el) => {
+  el.setAttribute('viewBox', '0 0 24 24');
+  el.classList.add('i');
+  el.innerHTML = ICONS[el.dataset.i] || '';
+});
+
+/* ---------- Preset filter ---------- */
+const BASE = {
+  exposure: 0, contrast: 1, sat: 1, temp: 0, tint: 0, fade: 0, bw: 0, grain: 0, vig: 0,
+  sharp: 0.15, bloom: 0, ab: 0, leak: 0, soft: 0, toneAmt: 0,
+  shadow: [0.5, 0.5, 0.5], high: [0.5, 0.5, 0.5], date: false, frame: 'none',
+  // efek khusus / lucu
+  bulge: 0, swirl: 0, pixel: 0, kaleido: 0, poster: 0, edge: 0, neon: 0, glitch: 0, thermal: 0,
+  half: 0, mfx: 0, wobble: 0, duo: 0, invert: 0, scan: 0,
+  duoA: [0, 0, 0], duoB: [1, 1, 1], deco: '', pat: '',
+};
+const PRESETS = [
+  { name: 'Asli', sw: ['#d9d4cc', '#7d776e'], p: {} },
+  { name: 'Digicam 2000s', sw: ['#9fd0ff', '#ff9d2e'], p: {
+      exposure: 0.12, contrast: 1.2, sat: 1.15, temp: 0.12, tint: -0.1, fade: 0.05, grain: 0.22, vig: 0.28,
+      sharp: 0.7, bloom: 0.3, ab: 0.3, toneAmt: 0.6, shadow: [0.42, 0.52, 0.72], high: [0.62, 0.56, 0.46], date: true } },
+  { name: 'CCD Y2K', sw: ['#6fb7ff', '#e6f3ff'], p: {
+      exposure: 0.1, contrast: 1.1, sat: 1.28, temp: -0.38, tint: 0.05, grain: 0.18, vig: 0.2,
+      sharp: 0.5, bloom: 0.55, ab: 0.45, toneAmt: 0.5, shadow: [0.4, 0.55, 0.72], high: [0.55, 0.58, 0.64], date: true } },
+  { name: 'Vintage Jernih', sw: ['#f0d9ae', '#a56d45'], p: {
+      exposure: 0.05, contrast: 1.08, sat: 0.92, temp: 0.35, fade: 0.17, grain: 0.1, vig: 0.3,
+      sharp: 0.55, bloom: 0.12, toneAmt: 0.55, shadow: [0.44, 0.5, 0.6], high: [0.62, 0.53, 0.4] } },
+  { name: 'Kodak Gold', sw: ['#ffd36a', '#c4651f'], p: {
+      contrast: 1.1, sat: 1.22, temp: 0.5, fade: 0.08, grain: 0.22, vig: 0.22, sharp: 0.4,
+      toneAmt: 0.6, shadow: [0.5, 0.48, 0.45], high: [0.66, 0.55, 0.38] } },
+  { name: 'Fuji Hijau', sw: ['#9ad6b0', '#2e6f5c'], p: {
+      contrast: 1.12, sat: 1.12, temp: -0.1, tint: 0.4, fade: 0.06, grain: 0.2, vig: 0.2, sharp: 0.4,
+      toneAmt: 0.6, shadow: [0.4, 0.55, 0.52], high: [0.55, 0.55, 0.5] } },
+  { name: 'Polaroid', sw: ['#f3efe6', '#c9a98b'], p: {
+      exposure: 0.08, contrast: 0.96, sat: 0.86, temp: 0.25, fade: 0.28, grain: 0.2, vig: 0.35, soft: 0.15, sharp: 0.2,
+      toneAmt: 0.4, shadow: [0.48, 0.52, 0.58], high: [0.58, 0.52, 0.44], frame: 'polaroid' } },
+  { name: 'Sinematik', sw: ['#2f6f7e', '#e49b5a'], p: {
+      contrast: 1.2, sat: 1.1, fade: 0.04, grain: 0.1, vig: 0.38, sharp: 0.45,
+      toneAmt: 1.0, shadow: [0.36, 0.52, 0.62], high: [0.66, 0.5, 0.36] } },
+  { name: 'Hitam Putih', sw: ['#eeeeee', '#2a2a2a'], p: {
+      contrast: 1.3, bw: 1, fade: 0.04, grain: 0.45, vig: 0.3, sharp: 0.5 } },
+  { name: 'Sepia', sw: ['#e8cfa5', '#5f3d22'], p: {
+      contrast: 1.12, bw: 1, fade: 0.12, grain: 0.25, vig: 0.4, toneAmt: 1.3, sharp: 0.3,
+      shadow: [0.38, 0.3, 0.22], high: [0.7, 0.56, 0.4] } },
+  { name: 'Light Leak', sw: ['#ffcf8a', '#ff5a2e'], p: {
+      temp: 0.3, sat: 1.1, fade: 0.15, grain: 0.25, vig: 0.25, leak: 0.85, bloom: 0.2, sharp: 0.3,
+      toneAmt: 0.4, shadow: [0.46, 0.5, 0.58], high: [0.6, 0.52, 0.42] } },
+  { name: 'Roll Film', sw: ['#222', '#f5a623'], p: {
+      contrast: 1.12, sat: 1.15, temp: 0.35, fade: 0.08, grain: 0.3, vig: 0.28, sharp: 0.4,
+      toneAmt: 0.5, shadow: [0.46, 0.5, 0.56], high: [0.64, 0.54, 0.4], frame: 'film' } },
+  { name: 'Pastel Matte', sw: ['#f6d6e0', '#a9c9e8'], p: {
+      exposure: 0.15, contrast: 0.9, sat: 0.8, temp: 0.1, tint: -0.2, fade: 0.35, grain: 0.08, vig: 0.1, soft: 0.1,
+      toneAmt: 0.4, shadow: [0.5, 0.48, 0.58], high: [0.6, 0.52, 0.5] } },
+  { name: 'Vivid HD', sw: ['#27d17f', '#ff4d6d'], p: {
+      contrast: 1.25, sat: 1.4, sharp: 1.0, vig: 0.1 } },
+
+  /* ===== Estetik ===== */
+  { c: 'Estetik', e: '🌇', name: 'Golden Hour', sw: ['#ffd08a', '#ff7a3d'], p: {
+      exposure: 0.1, contrast: 1.1, sat: 1.2, temp: 0.65, fade: 0.06, vig: 0.2, bloom: 0.4, leak: 0.25, sharp: 0.4,
+      grain: 0.1, toneAmt: 0.7, shadow: [0.48, 0.46, 0.5], high: [0.7, 0.54, 0.36] } },
+  { c: 'Estetik', e: '🌫️', name: 'Moody', sw: ['#2c3b44', '#8aa0a8'], p: {
+      exposure: -0.25, contrast: 1.3, sat: 0.75, temp: -0.2, fade: 0.12, vig: 0.5, grain: 0.2, sharp: 0.5,
+      toneAmt: 0.8, shadow: [0.38, 0.5, 0.58], high: [0.55, 0.52, 0.5] } },
+  { c: 'Estetik', e: '📸', name: 'Disposable', sw: ['#fff1c9', '#e05a2b'], p: {
+      exposure: 0.22, contrast: 1.35, sat: 1.1, temp: 0.18, fade: 0.04, grain: 0.38, vig: 0.55, bloom: 0.35,
+      sharp: 0.5, ab: 0.2, toneAmt: 0.4, shadow: [0.46, 0.52, 0.6], high: [0.64, 0.55, 0.42], date: true } },
+  { c: 'Estetik', e: '🎞️', name: 'Noir', sw: ['#f2f2f2', '#000'], p: {
+      contrast: 1.55, bw: 1, vig: 0.65, grain: 0.35, fade: 0.02, sharp: 0.6 } },
+  { c: 'Estetik', e: '🌃', name: 'Cyberpunk', sw: ['#ff2bd6', '#17e6ff'], p: {
+      contrast: 1.25, sat: 1.5, bloom: 0.55, ab: 0.5, vig: 0.35, grain: 0.12, sharp: 0.6,
+      toneAmt: 1.6, shadow: [0.62, 0.34, 0.7], high: [0.34, 0.62, 0.7] } },
+  { c: 'Estetik', e: '☁️', name: 'Dreamy', sw: ['#ffe6f2', '#bcd7ff'], p: {
+      exposure: 0.15, soft: 0.35, bloom: 0.75, fade: 0.14, sat: 1.1, temp: 0.1, vig: 0.15, sharp: 0 } },
+  { c: 'Estetik', e: '📼', name: 'VHS 90s', sw: ['#5a5ad0', '#d05a5a'], p: {
+      scan: 0.8, ab: 0.6, glitch: 0.25, grain: 0.4, sat: 1.25, temp: 0.08, contrast: 1.1, vig: 0.3,
+      bloom: 0.2, sharp: 0.2, date: true } },
+  { c: 'Estetik', e: '🌴', name: 'Vaporwave', sw: ['#3a1a8a', '#ff8fd0'], p: {
+      duo: 0.8, duoA: [0.16, 0.05, 0.42], duoB: [1, 0.62, 0.92], bloom: 0.4, scan: 0.3, contrast: 1.1, grain: 0.1 } },
+  { c: 'Estetik', e: '🟩', name: 'Matrix', sw: ['#031a06', '#4dff5e'], p: {
+      duo: 1, duoA: [0, 0.03, 0], duoB: [0.3, 1, 0.35], scan: 0.6, bloom: 0.45, grain: 0.2, contrast: 1.15 } },
+
+  /* ===== Lucu ===== */
+  { c: 'Lucu', e: '🐟', name: 'Mata Ikan', sw: ['#9ad4ff', '#1d5fa8'], p: {
+      bulge: 0.85, vig: 0.3, sharp: 0.5, sat: 1.1 } },
+  { c: 'Lucu', e: '🥴', name: 'Mengkerut', sw: ['#ffd0a8', '#a85a3a'], p: {
+      bulge: -0.8, sharp: 0.4, sat: 1.1 } },
+  { c: 'Lucu', e: '🌀', name: 'Pusaran', sw: ['#c9a8ff', '#4a2a9a'], p: {
+      swirl: 3.2, sat: 1.15, sharp: 0.3 } },
+  { c: 'Lucu', e: '🔮', name: 'Kaleidoskop', sw: ['#ff7ad9', '#7a7aff'], p: {
+      kaleido: 6, sat: 1.35, sharp: 0.3 } },
+  { c: 'Lucu', e: '🪞', name: 'Cermin Kembar', sw: ['#e0e0e0', '#8a8a8a'], p: { mfx: 1 } },
+  { c: 'Lucu', e: '🧩', name: 'Cermin 4', sw: ['#ffd36a', '#5aa8ff'], p: { mfx: 3, sat: 1.1 } },
+  { c: 'Lucu', e: '🍮', name: 'Jelly', sw: ['#ffc2d4', '#ff7aa8'], p: { wobble: 1.3, sat: 1.15, sharp: 0.2 } },
+  { c: 'Lucu', e: '👾', name: 'Pixel 8-bit', sw: ['#3a3a8a', '#ffd23a'], p: {
+      pixel: 80, poster: 5, sat: 1.4, sharp: 0 } },
+  { c: 'Lucu', e: '💥', name: 'Pop Art', sw: ['#ffe14d', '#ff3d6a'], p: {
+      half: 70, poster: 5, sat: 1.6, contrast: 1.2, edge: 0.6, sharp: 0.3 } },
+  { c: 'Lucu', e: '🎨', name: 'Kartun', sw: ['#7ad1ff', '#ff8f3a'], p: {
+      poster: 6, edge: 0.9, sat: 1.5, contrast: 1.15, sharp: 0.8 } },
+  { c: 'Lucu', e: '💡', name: 'Neon Garis', sw: ['#0a0014', '#ff2bd6'], p: { neon: 1, sharp: 0 } },
+  { c: 'Lucu', e: '📺', name: 'Glitch', sw: ['#00ffe1', '#ff2b6a'], p: {
+      glitch: 1, ab: 0.6, scan: 0.3, grain: 0.2, contrast: 1.1 } },
+  { c: 'Lucu', e: '🔥', name: 'Termal', sw: ['#2a0a6a', '#ffe14d'], p: { thermal: 1, sharp: 0.3 } },
+  { c: 'Lucu', e: '🧪', name: 'Negatif', sw: ['#ffffff', '#111'], p: { invert: 1, contrast: 1.1 } },
+  { c: 'Stiker', e: '✨', name: 'Sparkle', sw: ['#fff3b0', '#ffb3e6'], p: {
+      deco: 'sparkle', soft: 0.18, bloom: 0.5, exposure: 0.12, fade: 0.1, sat: 1.1, temp: 0.1, vig: 0.1 } },
+  { c: 'Stiker', e: '💖', name: 'Cinta', sw: ['#ffc2d9', '#ff4d88'], p: {
+      deco: 'hearts', temp: 0.15, tint: -0.15, exposure: 0.1, soft: 0.15, bloom: 0.3, fade: 0.08, sat: 1.1,
+      toneAmt: 0.6, shadow: [0.5, 0.46, 0.52], high: [0.66, 0.5, 0.54] } },
+  { c: 'Stiker', e: '🌸', name: 'Taman Bunga', sw: ['#ffd6e8', '#a8e6a8'], p: {
+      deco: 'flowers', exposure: 0.12, soft: 0.12, fade: 0.2, sat: 0.95, temp: 0.12, tint: -0.1 } },
+  { c: 'Stiker', e: '🎉', name: 'Pesta', sw: ['#ff6a6a', '#6a9aff'], p: {
+      deco: 'party', sat: 1.3, contrast: 1.1, bloom: 0.3 } },
+
+  /* ===== Stiker pola: bentuk kecil-kecil, putih, agak buram, memenuhi layar ===== */
+  { c: 'Stiker', e: '💗', name: 'Love Buram', sw: ['#ffe3ee', '#ffffff'], p: {
+      pat: 'love', soft: 0.1, bloom: 0.3, exposure: 0.08, fade: 0.08, sat: 1.05, temp: 0.08, sharp: 0.3 } },
+  { c: 'Stiker', e: '🩷', name: 'Love Pink', sw: ['#ffb0cd', '#ff7aa8'], p: {
+      pat: 'lovePink', soft: 0.12, bloom: 0.35, exposure: 0.1, fade: 0.1, tint: -0.12, temp: 0.12, sharp: 0.3,
+      toneAmt: 0.5, shadow: [0.5, 0.46, 0.52], high: [0.66, 0.5, 0.54] } },
+  { c: 'Stiker', e: '⭐', name: 'Bintang Buram', sw: ['#1d2a5a', '#ffffff'], p: {
+      pat: 'stars', bloom: 0.45, exposure: -0.03, contrast: 1.08, vig: 0.2, sharp: 0.4,
+      toneAmt: 0.6, shadow: [0.42, 0.48, 0.64], high: [0.56, 0.54, 0.54] } },
+  { c: 'Stiker', e: '💫', name: 'Glitter', sw: ['#fff6c8', '#ffffff'], p: {
+      pat: 'glitter', bloom: 0.5, soft: 0.08, exposure: 0.08, sharp: 0.4 } },
+  { c: 'Stiker', e: '🫧', name: 'Gelembung', sw: ['#bfeaff', '#ffffff'], p: {
+      pat: 'bubbles', temp: -0.08, sat: 1.1, exposure: 0.1, soft: 0.06, sharp: 0.4,
+      toneAmt: 0.5, shadow: [0.44, 0.54, 0.62], high: [0.52, 0.58, 0.62] } },
+  { c: 'Stiker', e: '❄️', name: 'Salju', sw: ['#d8ecff', '#ffffff'], p: {
+      pat: 'snow', temp: -0.25, exposure: 0.12, contrast: 1.05, fade: 0.05, bloom: 0.3, sharp: 0.4 } },
+  { c: 'Stiker', e: '🌼', name: 'Kelopak', sw: ['#fff3c4', '#ffffff'], p: {
+      pat: 'petals', exposure: 0.1, fade: 0.12, soft: 0.1, temp: 0.1, sharp: 0.3 } },
+  { c: 'Stiker', e: '🍬', name: 'Campur Manis', sw: ['#ffd1e6', '#c9e4ff'], p: {
+      pat: 'mix', sat: 1.15, bloom: 0.35, soft: 0.08, exposure: 0.08, sharp: 0.3 } },
+  { c: 'Stiker', e: '🟡', name: 'Bokeh Emas', sw: ['#ffe3a8', '#ff9d3a'], p: {
+      pat: 'bokeh', temp: 0.35, bloom: 0.45, exposure: 0.05, soft: 0.08, vig: 0.2, sharp: 0.3 } },
+  { c: 'Stiker', e: '🔵', name: 'Bokeh Biru', sw: ['#cfe6ff', '#5a8ae0'], p: {
+      pat: 'bokehCool', temp: -0.25, bloom: 0.4, exposure: 0.05, soft: 0.06, vig: 0.2, sharp: 0.3 } },
+
+  /* ===== Jernih ===== */
+  { c: 'Jernih', e: '🍃', name: 'Jernih Alami', sw: ['#b9e0c4', '#4a8a5a'], p: {
+      exposure: 0.05, contrast: 1.08, sat: 1.08, sharp: 0.7, vig: 0.08 } },
+  { c: 'Jernih', e: '🌤️', name: 'Fresh Bright', sw: ['#fffbe0', '#9fd4ff'], p: {
+      exposure: 0.2, contrast: 1.05, sat: 1.15, temp: -0.05, fade: 0.03, sharp: 0.6 } },
+  { c: 'Jernih', e: '🙂', name: 'Potret Jernih', sw: ['#ffe0cc', '#e8a98a'], p: {
+      exposure: 0.1, contrast: 1.06, sat: 1.05, temp: 0.12, soft: 0.06, bloom: 0.12, sharp: 0.55, vig: 0.12,
+      toneAmt: 0.4, shadow: [0.48, 0.5, 0.54], high: [0.6, 0.52, 0.46] } },
+  { c: 'Jernih', e: '🏖️', name: 'Pantai', sw: ['#7fd8ff', '#ffe8b0'], p: {
+      exposure: 0.1, contrast: 1.15, sat: 1.3, temp: -0.1, sharp: 0.75, bloom: 0.1,
+      toneAmt: 0.5, shadow: [0.44, 0.54, 0.66], high: [0.6, 0.56, 0.5] } },
+  { c: 'Jernih', e: '🌅', name: 'Senja Jernih', sw: ['#ffb066', '#ff5a7a'], p: {
+      contrast: 1.15, sat: 1.3, temp: 0.45, sharp: 0.65, bloom: 0.2, vig: 0.18,
+      toneAmt: 0.8, shadow: [0.46, 0.46, 0.58], high: [0.7, 0.52, 0.38] } },
+  { c: 'Jernih', e: '🏙️', name: 'Kota Malam', sw: ['#16214a', '#ff9a3a'], p: {
+      exposure: 0.1, contrast: 1.25, sat: 1.2, bloom: 0.4, sharp: 0.8, vig: 0.3,
+      toneAmt: 1.0, shadow: [0.38, 0.5, 0.62], high: [0.66, 0.52, 0.38] } },
+  { c: 'Jernih', e: '🍵', name: 'Matcha', sw: ['#cfe8b0', '#6a9a4a'], p: {
+      exposure: 0.08, sat: 1.1, tint: 0.25, temp: 0.05, fade: 0.06, sharp: 0.55, contrast: 1.05 } },
+  { c: 'Jernih', e: '📷', name: 'Analog Jernih', sw: ['#f0dcb4', '#7a9a8a'], p: {
+      contrast: 1.08, sat: 1.05, temp: 0.15, grain: 0.08, sharp: 0.7, fade: 0.05, vig: 0.15,
+      toneAmt: 0.4, shadow: [0.46, 0.52, 0.56], high: [0.6, 0.53, 0.44] } },
+  { c: 'Jernih', e: '🧊', name: 'Es Biru', sw: ['#d4f0ff', '#4a8ac8'], p: {
+      exposure: 0.08, contrast: 1.12, sat: 1.1, temp: -0.45, sharp: 0.7,
+      toneAmt: 0.6, shadow: [0.42, 0.52, 0.68], high: [0.54, 0.58, 0.64] } },
+  { c: 'Jernih', e: '🌲', name: 'Hijau Hutan', sw: ['#9ad08a', '#1f5a3a'], p: {
+      contrast: 1.15, sat: 1.25, tint: 0.3, temp: 0.05, sharp: 0.7, vig: 0.15,
+      toneAmt: 0.5, shadow: [0.4, 0.55, 0.5], high: [0.58, 0.56, 0.46] } },
+  { c: 'Estetik', e: '🍑', name: 'Pink Haze', sw: ['#ffd9e0', '#f2a9b8'], p: {
+      exposure: 0.15, temp: 0.1, tint: -0.2, fade: 0.2, soft: 0.1, sat: 0.95, bloom: 0.25, sharp: 0.2,
+      toneAmt: 0.7, shadow: [0.52, 0.46, 0.54], high: [0.68, 0.52, 0.54] } },
+];
+const TABS = ['Klasik', 'Jernih', 'Estetik', 'Lucu', 'Stiker'];
+
+/* ---------- Pola stiker (digambar sendiri, dengan blur lembut) ---------- */
+const PATTERNS = {
+  love: { shapes: ['heart'], n: 70, size: [0.016, 0.045], rgb: '255,255,255' },
+  lovePink: { shapes: ['heart'], n: 70, size: [0.016, 0.045], rgb: '255,170,205' },
+  stars: { shapes: ['star'], n: 70, size: [0.014, 0.04], rgb: '255,255,255' },
+  glitter: { shapes: ['sparkle'], n: 80, size: [0.012, 0.04], rgb: '255,255,255' },
+  bubbles: { shapes: ['bubble'], n: 55, size: [0.02, 0.07], rgb: '255,255,255' },
+  snow: { shapes: ['snow', 'dot'], n: 90, size: [0.012, 0.04], rgb: '255,255,255' },
+  petals: { shapes: ['flower'], n: 55, size: [0.02, 0.055], rgb: '255,255,255' },
+  mix: { shapes: ['heart', 'star', 'sparkle', 'bubble'], n: 75, size: [0.016, 0.045], rgb: '255,255,255' },
+  bokeh: { shapes: ['dot'], n: 42, size: [0.03, 0.11], rgb: '255,222,160', alpha: [0.18, 0.42], soft: 1 },
+  bokehCool: { shapes: ['dot'], n: 42, size: [0.03, 0.11], rgb: '200,225,255', alpha: [0.18, 0.42], soft: 1 },
+};
+const SHAPES = (() => {
+  const heart = new Path2D();
+  heart.moveTo(0, -0.2);
+  heart.bezierCurveTo(0, -0.5, -0.5, -0.5, -0.5, -0.15);
+  heart.bezierCurveTo(-0.5, 0.15, -0.1, 0.3, 0, 0.5);
+  heart.bezierCurveTo(0.1, 0.3, 0.5, 0.15, 0.5, -0.15);
+  heart.bezierCurveTo(0.5, -0.5, 0, -0.5, 0, -0.2);
+  heart.closePath();
+  const star = new Path2D();
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + (i * Math.PI) / 5, r = i % 2 ? 0.21 : 0.5;
+    star[i ? 'lineTo' : 'moveTo'](Math.cos(a) * r, Math.sin(a) * r);
+  }
+  star.closePath();
+  const sparkle = new Path2D();
+  sparkle.moveTo(0, -0.5);
+  sparkle.quadraticCurveTo(0.06, -0.06, 0.5, 0);
+  sparkle.quadraticCurveTo(0.06, 0.06, 0, 0.5);
+  sparkle.quadraticCurveTo(-0.06, 0.06, -0.5, 0);
+  sparkle.quadraticCurveTo(-0.06, -0.06, 0, -0.5);
+  const dot = new Path2D();
+  dot.arc(0, 0, 0.5, 0, Math.PI * 2);
+  const flower = new Path2D();
+  for (let i = 0; i < 5; i++) {
+    const a = (i * Math.PI * 2) / 5, x = Math.cos(a) * 0.26, y = Math.sin(a) * 0.26;
+    flower.moveTo(x + 0.22, y);
+    flower.arc(x, y, 0.22, 0, Math.PI * 2);
+  }
+  const snow = new Path2D();
+  for (let i = 0; i < 3; i++) {
+    const a = (i * Math.PI) / 3;
+    snow.moveTo(Math.cos(a) * -0.5, Math.sin(a) * -0.5);
+    snow.lineTo(Math.cos(a) * 0.5, Math.sin(a) * 0.5);
+  }
+  return {
+    heart: { p: heart, mode: 'fill' }, star: { p: star, mode: 'fill' }, sparkle: { p: sparkle, mode: 'fill' },
+    dot: { p: dot, mode: 'fill' }, flower: { p: flower, mode: 'fill' },
+    bubble: { p: dot, mode: 'bubble' }, snow: { p: snow, mode: 'stroke' },
+  };
+})();
+
+function mulberry(a) {
+  return () => {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+let patCache = { key: '', cv: null };
+function patternLayer(name, w, h) {
+  const key = `${name}|${w}|${h}`;
+  if (patCache.key === key) return patCache.cv;
+  const def = PATTERNS[name];
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d');
+  const rnd = mulberry([...name].reduce((a, ch) => a * 31 + ch.charCodeAt(0), 7));
+  const m = Math.min(w, h);
+  const n = Math.max(60, Math.min(260, Math.round(def.n * 1.7 * (w * h) / 1e6)));
+  const cols = Math.ceil(Math.sqrt((n * w) / h)), rows = Math.ceil(n / cols);
+  const BIG = w * 2 + 2000;
+  const [amin, amax] = def.alpha || [0.3, 0.75];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const x = ((c + rnd()) / cols) * w, y = ((r + rnd()) / rows) * h;
+      const s = m * (def.size[0] + rnd() * (def.size[1] - def.size[0]));
+      const a = amin + rnd() * (amax - amin);
+      const sh = SHAPES[def.shapes[Math.floor(rnd() * def.shapes.length)]];
+      const rot = (rnd() - 0.5) * 0.9;
+      const blurry = def.soft || rnd() < 0.55; // sebagian benar-benar buram, sebagian tajam dengan glow
+      ctx.save();
+      ctx.globalAlpha = a;
+      ctx.shadowColor = `rgba(${def.rgb},1)`;
+      ctx.shadowBlur = blurry ? s * (0.35 + rnd() * 0.3) : s * 0.22;
+      ctx.shadowOffsetX = blurry ? BIG : 0;
+      ctx.translate(blurry ? x - BIG : x, y);
+      ctx.rotate(rot);
+      ctx.scale(s, s);
+      ctx.fillStyle = `rgb(${def.rgb})`;
+      ctx.strokeStyle = `rgb(${def.rgb})`;
+      ctx.lineCap = 'round';
+      if (sh.mode === 'fill') ctx.fill(sh.p);
+      else if (sh.mode === 'stroke') { ctx.lineWidth = 0.08; ctx.stroke(sh.p); }
+      else { ctx.fillStyle = `rgba(${def.rgb},.18)`; ctx.fill(sh.p); ctx.lineWidth = 0.06; ctx.stroke(sh.p); }
+      ctx.restore();
+    }
+  }
+  patCache = { key, cv };
+  return cv;
+}
+PRESETS.forEach((p) => { p.c = p.c || 'Klasik'; });
+
+const DECO = {
+  sparkle: ['✨', '⭐', '✨'],
+  hearts: ['💖', '💕', '💗'],
+  flowers: ['🌸', '🌼', '🌷'],
+  party: ['🎉', '🎈', '✨'],
+};
+// posisi relatif [x, y, skala, rotasi] — di pinggir supaya wajah tidak tertutup
+const DECO_SPOTS = [
+  [0.08, 0.1, 1.0, -0.3], [0.9, 0.12, 0.8, 0.3], [0.5, 0.05, 0.6, 0.1], [0.14, 0.88, 0.8, 0.2],
+  [0.87, 0.84, 1.1, -0.2], [0.04, 0.5, 0.6, -0.1], [0.96, 0.48, 0.7, 0.2], [0.3, 0.94, 0.6, 0.3], [0.7, 0.07, 0.6, -0.2],
+];
+
+const SLIDERS = [
+  ['exposure', 'Cahaya', -1, 1, 0.01],
+  ['contrast', 'Kontras', 0.6, 1.6, 0.01],
+  ['sat', 'Warna', 0, 2, 0.01],
+  ['temp', 'Hangat/Dingin', -1, 1, 0.01],
+  ['tint', 'Tint (hijau)', -1, 1, 0.01],
+  ['fade', 'Pudar', 0, 1, 0.01],
+  ['grain', 'Grain', 0, 1, 0.01],
+  ['vig', 'Vignette', 0, 1, 0.01],
+  ['sharp', 'Ketajaman', 0, 2, 0.01],
+  ['bloom', 'Bloom/Glow', 0, 1, 0.01],
+  ['ab', 'Aberasi lensa', 0, 1, 0.01],
+  ['leak', 'Light leak', 0, 1, 0.01],
+  ['soft', 'Soft focus', 0, 0.6, 0.01],
+  ['bulge', 'Cembung/Cekung', -1, 1, 0.01],
+  ['swirl', 'Pusaran', -4, 4, 0.01],
+  ['pixel', 'Pixel', 0, 200, 1],
+  ['poster', 'Posterize', 0, 12, 1],
+  ['glitch', 'Glitch', 0, 1, 0.01],
+  ['scan', 'Scanline', 0, 1, 0.01],
+  ['wobble', 'Goyang', 0, 2, 0.01],
+  ['duo', 'Duotone', 0, 1, 0.01],
+];
+
+/* ---------- Shader ---------- */
+const VERT = `#version 300 es
+out vec2 vUv;
+void main(){
+  vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
+  vUv = p;
+  gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
+}`;
+
+const FRAG = `#version 300 es
+precision highp float;
+uniform sampler2D uTex;
+uniform vec4 uRect;      // x,y,w,h (uv sumber, origin kiri-atas)
+uniform float uMirror;
+uniform vec2 uPx;        // 1/lebar, 1/tinggi output
+uniform float uTime, uAspect;
+uniform float uExposure, uContrast, uSat, uTemp, uTint, uFade, uBw, uGrain, uVig,
+              uSharp, uBloom, uAb, uLeak, uToneAmt, uSoft;
+uniform vec3 uShadow, uHigh, uDuoA, uDuoB;
+uniform float uBulge, uSwirl, uPixel, uKaleido, uPoster, uEdge, uNeon, uGlitch, uThermal,
+              uHalf, uMfx, uWobble, uDuo, uInvert, uScan, uClock;
+in vec2 vUv;
+out vec4 o;
+
+float hash(vec2 p){
+  vec3 p3 = fract(vec3(p.xyx) * .1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
+const vec3 LUM = vec3(0.299, 0.587, 0.114);
+
+// distorsi / efek lucu pada koordinat
+vec2 warp(vec2 uv){
+  vec2 p = uv;
+  if (uMfx > 0.5) {
+    if (uMfx < 1.5 || uMfx > 2.5) p.x = p.x > 0.5 ? 1.0 - p.x : p.x;
+    if (uMfx > 1.5) p.y = p.y > 0.5 ? 1.0 - p.y : p.y;
+  }
+  if (uBulge != 0.0 || uSwirl != 0.0 || uKaleido > 0.5) {
+    vec2 q = (p - 0.5) * vec2(uAspect, 1.0);
+    float r = length(q);
+    float fall = 1.0 - smoothstep(0.0, 0.8, r);
+    q *= 1.0 - uBulge * fall;
+    if (uSwirl != 0.0) {
+      float a = uSwirl * (1.0 - smoothstep(0.0, 0.7, r));
+      float sn = sin(a), cs = cos(a);
+      q = mat2(cs, -sn, sn, cs) * q;
+    }
+    if (uKaleido > 0.5) {
+      float ang = atan(q.y, q.x);
+      float seg = 6.2831853 / uKaleido;
+      ang = mod(ang, seg);
+      ang = abs(ang - seg * 0.5);
+      q = length(q) * vec2(cos(ang), sin(ang));
+    }
+    p = q / vec2(uAspect, 1.0) + 0.5;
+  }
+  if (uWobble > 0.0) {
+    p.x += sin(p.y * 28.0 + uClock * 5.0) * 0.012 * uWobble;
+    p.y += sin(p.x * 22.0 + uClock * 4.0) * 0.012 * uWobble;
+  }
+  if (uGlitch > 0.0) {
+    float row = floor(p.y * 28.0);
+    float t = floor(uClock * 7.0);
+    if (hash(vec2(row, t)) > 1.0 - 0.22 * uGlitch)
+      p.x += (hash(vec2(row, t + 9.0)) - 0.5) * 0.18 * uGlitch;
+  }
+  if (uPixel > 0.5) {
+    vec2 cells = vec2(uPixel * uAspect, uPixel);
+    p = (floor(p * cells) + 0.5) / cells;
+  }
+  return clamp(p, 0.0, 1.0);
+}
+
+vec3 tex(vec2 uv){
+  uv = warp(uv);
+  float x = mix(uv.x, 1.0 - uv.x, uMirror);
+  vec2 s = vec2(uRect.x + x * uRect.z, uRect.y + (1.0 - uv.y) * uRect.w);
+  return texture(uTex, s).rgb;
+}
+float lumAt(vec2 uv){ return dot(tex(uv), LUM); }
+
+void main(){
+  vec2 c = vUv - 0.5;
+  vec3 col;
+  if (uAb > 0.0 || uGlitch > 0.0) {
+    vec2 off = c * uAb * 0.012 + vec2(uGlitch * 0.006, 0.0);
+    col = vec3(tex(vUv + off).r, tex(vUv).g, tex(vUv - off).b);
+  } else {
+    col = tex(vUv);
+  }
+
+  // sharpen / soft
+  vec3 blur = (tex(vUv + vec2(uPx.x, 0.0)) + tex(vUv - vec2(uPx.x, 0.0))
+             + tex(vUv + vec2(0.0, uPx.y)) + tex(vUv - vec2(0.0, uPx.y))) * 0.25;
+  col += (col - blur) * uSharp * 1.6;
+  if (uSoft > 0.0) {
+    vec3 wide = vec3(0.0);
+    for (int i = 0; i < 8; i++) {
+      float a = float(i) * 0.785398;
+      wide += tex(vUv + vec2(cos(a) / uAspect, sin(a)) * 0.006);
+    }
+    col = mix(col, wide / 8.0, uSoft);
+  }
+
+  // bloom (highlight glow)
+  if (uBloom > 0.0) {
+    vec3 b = vec3(0.0);
+    for (int i = 0; i < 8; i++) {
+      float a = float(i) * 0.785398;
+      vec2 d = vec2(cos(a) / uAspect, sin(a));
+      b += max(tex(vUv + d * 0.010) - 0.62, 0.0);
+      b += max(tex(vUv + d * 0.024) - 0.62, 0.0);
+    }
+    col += b / 16.0 * uBloom * 2.4;
+  }
+
+  // tone dasar
+  col *= exp2(uExposure);
+  col = (col - 0.5) * uContrast + 0.5;
+  float l = dot(col, LUM);
+  col = mix(vec3(l), col, uSat);
+  col.r += uTemp * 0.09;  col.b -= uTemp * 0.09;
+  col.g += uTint * 0.05;
+
+  // split toning
+  l = clamp(dot(col, LUM), 0.0, 1.0);
+  vec3 tone = mix(uShadow, uHigh, smoothstep(0.15, 0.85, l));
+  col += (tone - 0.5) * uToneAmt * 0.45;
+
+  // pudar (angkat hitam)
+  col = mix(vec3(uFade * 0.26), vec3(1.0 - uFade * 0.06), clamp(col, 0.0, 1.0));
+
+  // hitam putih
+  l = dot(col, LUM);
+  col = mix(col, vec3(l) + (tone - 0.5) * uToneAmt * 0.45 * step(0.99, uBw), uBw);
+
+  // light leak (screen)
+  if (uLeak > 0.0) {
+    float k1 = 1.0 - smoothstep(0.0, 0.85, length((vUv - vec2(1.0, 0.85)) * vec2(uAspect, 1.0)));
+    float k2 = 1.0 - smoothstep(0.0, 0.7, length((vUv - vec2(0.0, 0.1)) * vec2(uAspect, 1.0)));
+    vec3 lk = vec3(1.0, 0.42, 0.12) * k1 + vec3(0.95, 0.2, 0.35) * k2 * 0.5;
+    col = 1.0 - (1.0 - col) * (1.0 - lk * uLeak * 0.75);
+  }
+
+  // ===== efek khusus =====
+  if (uInvert > 0.0) col = mix(col, 1.0 - col, uInvert);
+  if (uDuo > 0.0) {
+    float ld = dot(col, LUM);
+    col = mix(col, mix(uDuoA, uDuoB, smoothstep(0.05, 0.95, ld)), uDuo);
+  }
+  if (uThermal > 0.0) {
+    float t = clamp(dot(col, LUM), 0.0, 1.0);
+    vec3 th = t < 0.25 ? mix(vec3(0.0, 0.0, 0.15), vec3(0.4, 0.0, 0.6), t / 0.25)
+            : t < 0.5  ? mix(vec3(0.4, 0.0, 0.6), vec3(0.9, 0.1, 0.1), (t - 0.25) / 0.25)
+            : t < 0.75 ? mix(vec3(0.9, 0.1, 0.1), vec3(1.0, 0.9, 0.1), (t - 0.5) / 0.25)
+                       : mix(vec3(1.0, 0.9, 0.1), vec3(1.0), (t - 0.75) / 0.25);
+    col = mix(col, th, uThermal);
+  }
+  if (uPoster > 1.5) col = floor(clamp(col, 0.0, 1.0) * uPoster + 0.5) / uPoster;
+  if (uHalf > 0.0) {
+    vec2 hf = fract(vUv * vec2(uAspect, 1.0) * uHalf) - 0.5;
+    float hl = clamp(dot(col, LUM), 0.0, 1.0);
+    float rad = sqrt(1.0 - hl) * 0.62 + 0.05;
+    float ink = 1.0 - smoothstep(rad - 0.1, rad + 0.04, length(hf));
+    col = mix(vec3(0.99, 0.96, 0.88), col * 1.1, ink);
+  }
+  if (uEdge > 0.0 || uNeon > 0.0) {
+    vec2 sp = uPx * 1.6;
+    float e0 = lumAt(vUv + vec2(-sp.x, -sp.y)), e1 = lumAt(vUv + vec2(0.0, -sp.y)), e2 = lumAt(vUv + vec2(sp.x, -sp.y));
+    float e3 = lumAt(vUv + vec2(-sp.x, 0.0)),                                          e5 = lumAt(vUv + vec2(sp.x, 0.0));
+    float e6 = lumAt(vUv + vec2(-sp.x, sp.y)),  e7 = lumAt(vUv + vec2(0.0, sp.y)),  e8 = lumAt(vUv + vec2(sp.x, sp.y));
+    float gx = -e0 - 2.0 * e3 - e6 + e2 + 2.0 * e5 + e8;
+    float gy = -e0 - 2.0 * e1 - e2 + e6 + 2.0 * e7 + e8;
+    float edge = smoothstep(0.12, 0.45, length(vec2(gx, gy)));
+    col = mix(col, vec3(0.05), edge * uEdge);
+    if (uNeon > 0.0) {
+      vec3 nc = 0.5 + 0.5 * cos(6.2831853 * (vec3(0.0, 0.33, 0.67) + dot(col, LUM) * 1.2 + uClock * 0.15));
+      col = mix(col, vec3(0.02, 0.0, 0.05) + col * 0.12 + nc * edge * 1.7, uNeon);
+    }
+  }
+  if (uScan > 0.0) {
+    col *= 1.0 - uScan * 0.22 * (0.5 + 0.5 * sin(vUv.y * 720.0 * 3.14159265));
+    col *= 1.0 - uScan * 0.04 * sin(uClock * 60.0);
+  }
+
+  // vignette
+  float d = length(c * vec2(1.0, 1.0));
+  col *= mix(1.0, 1.0 - uVig, smoothstep(0.28, 0.78, d));
+
+  // grain (bobot di mid-tone)
+  if (uGrain > 0.0) {
+    vec2 cell = floor(vUv * vec2(uAspect, 1.0) * 1400.0);
+    float n = hash(cell + vec2(uTime * 61.0, uTime * 17.0)) - 0.5;
+    float w = 1.0 - abs(dot(col, LUM) - 0.5) * 1.4;
+    col += n * uGrain * 0.28 * w;
+  }
+
+  // dither anti-banding
+  col += (hash(gl_FragCoord.xy + uTime) - 0.5) / 255.0;
+  o = vec4(clamp(col, 0.0, 1.0), 1.0);
+}`;
+
+const UNIFORMS = {
+  exposure: 'uExposure', contrast: 'uContrast', sat: 'uSat', temp: 'uTemp', tint: 'uTint', fade: 'uFade',
+  bw: 'uBw', grain: 'uGrain', vig: 'uVig', sharp: 'uSharp', bloom: 'uBloom', ab: 'uAb', leak: 'uLeak',
+  toneAmt: 'uToneAmt', soft: 'uSoft',
+  bulge: 'uBulge', swirl: 'uSwirl', pixel: 'uPixel', kaleido: 'uKaleido', poster: 'uPoster', edge: 'uEdge',
+  neon: 'uNeon', glitch: 'uGlitch', thermal: 'uThermal', half: 'uHalf', mfx: 'uMfx', wobble: 'uWobble',
+  duo: 'uDuo', invert: 'uInvert', scan: 'uScan',
+};
+
+class Renderer {
+  constructor(canvas) {
+    this.canvas = canvas;
+    const gl = canvas.getContext('webgl2', { alpha: false, antialias: false, preserveDrawingBuffer: true });
+    if (!gl) throw new Error('WebGL2 tidak tersedia');
+    this.gl = gl;
+    const sh = (type, src) => {
+      const s = gl.createShader(type);
+      gl.shaderSource(s, src);
+      gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+      return s;
+    };
+    const prog = gl.createProgram();
+    gl.attachShader(prog, sh(gl.VERTEX_SHADER, VERT));
+    gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FRAG));
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+    gl.useProgram(prog);
+    this.prog = prog;
+    this.loc = {};
+    this.vao = gl.createVertexArray();
+    gl.bindVertexArray(this.vao);
+    this.tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, this.tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    this.maxSize = Math.min(gl.getParameter(gl.MAX_TEXTURE_SIZE), gl.getParameter(gl.MAX_RENDERBUFFER_SIZE));
+  }
+  u(name) {
+    if (!(name in this.loc)) this.loc[name] = this.gl.getUniformLocation(this.prog, name);
+    return this.loc[name];
+  }
+  draw(src, rect, w, h, p, mirror, mip) {
+    const gl = this.gl;
+    if (this.canvas.width !== w || this.canvas.height !== h) {
+      this.canvas.width = w;
+      this.canvas.height = h;
+    }
+    gl.viewport(0, 0, w, h);
+    gl.bindTexture(gl.TEXTURE_2D, this.tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
+    if (mip) {
+      gl.generateMipmap(gl.TEXTURE_2D);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    } else {
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    }
+    gl.uniform1i(this.u('uTex'), 0);
+    gl.uniform4f(this.u('uRect'), rect.x, rect.y, rect.w, rect.h);
+    gl.uniform1f(this.u('uMirror'), mirror ? 1 : 0);
+    gl.uniform2f(this.u('uPx'), 1 / w, 1 / h);
+    gl.uniform1f(this.u('uTime'), Math.random());
+    gl.uniform1f(this.u('uAspect'), w / h);
+    for (const k in UNIFORMS) gl.uniform1f(this.u(UNIFORMS[k]), p[k]);
+    gl.uniform1f(this.u('uClock'), (performance.now() / 1000) % 1000);
+    gl.uniform3fv(this.u('uDuoA'), p.duoA);
+    gl.uniform3fv(this.u('uDuoB'), p.duoB);
+    gl.uniform3fv(this.u('uShadow'), p.shadow);
+    gl.uniform3fv(this.u('uHigh'), p.high);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+}
+
+/* ---------- State ---------- */
+const S = {
+  params: { ...BASE },
+  preset: 0,
+  mode: 'camera', // 'camera' | 'image'
+  img: null, // ImageBitmap/Image saat mode image
+  facing: 'environment',
+  isFront: false,
+  camRes: 'max',
+  exportSize: 'uhd',
+  format: 'jpeg',
+  ratio: 'native',
+  mirror: true,
+  grid: false,
+  sensor: false,
+  sound: true,
+  timer: 0,
+  dirty: true,
+};
+const SAVED_KEYS = ['camRes', 'exportSize', 'format', 'ratio', 'mirror', 'grid', 'sensor', 'sound', 'facing'];
+try {
+  const sv = JSON.parse(localStorage.getItem('camawa') || '{}');
+  SAVED_KEYS.forEach((k) => { if (k in sv) S[k] = sv[k]; });
+} catch (e) { /* abaikan */ }
+const saveSettings = () => {
+  try { localStorage.setItem('camawa', JSON.stringify(Object.fromEntries(SAVED_KEYS.map((k) => [k, S[k]])))); } catch (e) { /* abaikan */ }
+};
+
+const view = $('#view');
+const vctx = view.getContext('2d');
+const video = document.createElement('video');
+video.playsInline = true;
+video.muted = true;
+let stream = null;
+let track = null;
+let previewR = null;
+let exportR = null;
+let glOK = true;
+
+/* ---------- Helpers ---------- */
+function toast(t) {
+  const el = $('#toast');
+  el.textContent = t;
+  el.classList.add('show');
+  clearTimeout(toast.t);
+  toast.t = setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+function srcSize() {
+  if (S.mode === 'image' && S.img) return [S.img.width, S.img.height];
+  return [video.videoWidth, video.videoHeight];
+}
+
+function cropInfo(sw, sh) {
+  let r = sw / sh;
+  if (S.ratio !== 'native') {
+    const [a, b] = S.ratio.split(':').map(Number);
+    r = a / b;
+  }
+  let rect;
+  if (sw / sh > r) {
+    const cw = (sh * r) / sw;
+    rect = { x: (1 - cw) / 2, y: 0, w: cw, h: 1 };
+  } else {
+    const ch = sw / (r * sh);
+    rect = { x: 0, y: (1 - ch) / 2, w: 1, h: ch };
+  }
+  return { rect, pw: rect.w * sw, ph: rect.h * sh };
+}
+
+/* ---------- Komposisi (bingkai + cap tanggal) ---------- */
+function compose(dst, glc, p) {
+  const w = glc.width, h = glc.height;
+  let W = w, H = h, ox = 0, oy = 0;
+  if (p.frame === 'polaroid') {
+    const b = Math.round(w * 0.05);
+    W = w + b * 2; H = h + b + Math.round(w * 0.17); ox = b; oy = b;
+  } else if (p.frame === 'film') {
+    const bh = Math.round(h * 0.09), sb = Math.round(w * 0.02);
+    W = w + sb * 2; H = h + bh * 2; ox = sb; oy = bh;
+  }
+  if (dst.width !== W || dst.height !== H) { dst.width = W; dst.height = H; }
+  const ctx = dst.getContext('2d');
+  ctx.imageSmoothingQuality = 'high';
+  if (p.frame === 'polaroid') {
+    ctx.fillStyle = '#f3efe6';
+    ctx.fillRect(0, 0, W, H);
+  } else if (p.frame === 'film') {
+    ctx.fillStyle = '#111';
+    ctx.fillRect(0, 0, W, H);
+    const bh = oy, hw = bh * 0.34, hh = bh * 0.48, gap = bh * 0.95;
+    ctx.fillStyle = '#e9e2cf';
+    for (let x = gap * 0.5; x < W - hw; x += gap) {
+      [bh * 0.26, H - bh * 0.26 - hh].forEach((y) => {
+        ctx.beginPath();
+        ctx.roundRect ? ctx.roundRect(x, y, hw, hh, hw * 0.25) : ctx.rect(x, y, hw, hh);
+        ctx.fill();
+      });
+    }
+  }
+  ctx.drawImage(glc, ox, oy, w, h);
+  if (p.pat && PATTERNS[p.pat]) ctx.drawImage(patternLayer(p.pat, w, h), ox, oy);
+  if (p.deco && DECO[p.deco]) {
+    const set = DECO[p.deco];
+    const base = Math.min(w, h) * 0.12;
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    DECO_SPOTS.forEach(([x, y, k, rot], i) => {
+      ctx.save();
+      ctx.translate(ox + x * w, oy + y * h);
+      ctx.rotate(rot);
+      ctx.font = `${Math.round(base * k)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
+      ctx.fillText(set[i % set.length], 0, 0);
+      ctx.restore();
+    });
+    ctx.restore();
+  }
+  if (p.date) {
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const t = `'${String(d.getFullYear()).slice(2)} ${pad(d.getMonth() + 1)} ${pad(d.getDate())}`;
+    const fs = Math.max(12, Math.round(h * 0.036));
+    ctx.save();
+    ctx.font = `bold ${fs}px "Courier New", monospace`;
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'alphabetic';
+    ctx.shadowColor = 'rgba(255,110,0,.85)';
+    ctx.shadowBlur = fs * 0.4;
+    ctx.fillStyle = '#ff9d2e';
+    ctx.fillText(t, ox + w - fs * 0.9, oy + h - fs * 0.9);
+    ctx.restore();
+  }
+}
+
+/* ---------- Loop pratinjau ---------- */
+function frame() {
+  requestAnimationFrame(frame);
+  if (!glOK) return;
+  let src = null;
+  if (S.mode === 'camera') {
+    if (video.readyState >= 2 && video.videoWidth) src = video;
+  } else if (S.img && S.dirty) {
+    src = S.img;
+  }
+  if (!src) return;
+  S.dirty = false;
+  const [sw, sh] = srcSize();
+  const { rect, pw, ph } = cropInfo(sw, sh);
+  const sc = Math.min(1, 1280 / Math.max(pw, ph));
+  const w = Math.max(2, Math.round(pw * sc)), h = Math.max(2, Math.round(ph * sc));
+  const mirror = S.mode === 'camera' && S.isFront && S.mirror;
+  try {
+    previewR.draw(src, rect, w, h, S.params, mirror, sw > w * 1.6);
+    compose(view, previewR.canvas, S.params);
+  } catch (e) { console.error(e); }
+}
+
+/* ---------- Kamera ---------- */
+const RES = { max: [4096, 2160], '4k': [3840, 2160], fhd: [1920, 1080], hd: [1280, 720] };
+
+function showMsg(text) {
+  $('#msgText').textContent = text;
+  $('#msg').hidden = false;
+}
+
+function stopCamera() {
+  if (stream) stream.getTracks().forEach((t) => t.stop());
+  stream = null; track = null;
+  video.srcObject = null;
+}
+
+async function startCamera() {
+  stopCamera();
+  $('#msg').hidden = true;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    showMsg('Browser ini tidak mendukung akses kamera, atau halaman tidak dibuka lewat HTTPS. Kamu tetap bisa membuka foto dari galeri.');
+    return;
+  }
+  const [rw, rh] = RES[S.camRes] || RES.max;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { facingMode: { ideal: S.facing }, width: { ideal: rw }, height: { ideal: rh } },
+    });
+  } catch (e) {
+    const denied = e && (e.name === 'NotAllowedError' || e.name === 'SecurityError');
+    showMsg(denied
+      ? 'Izin kamera ditolak. Aktifkan izin kamera untuk situs ini di pengaturan browser, lalu coba lagi.'
+      : 'Kamera tidak ditemukan atau sedang dipakai aplikasi lain.');
+    return;
+  }
+  track = stream.getVideoTracks()[0];
+  if (S.camRes === 'max' && track.getCapabilities) {
+    try {
+      const caps = track.getCapabilities();
+      if (caps.width && caps.height) {
+        await track.applyConstraints({ width: { ideal: caps.width.max }, height: { ideal: caps.height.max } });
+      }
+    } catch (e) { /* tetap pakai resolusi default */ }
+  }
+  const st = track.getSettings ? track.getSettings() : {};
+  S.isFront = st.facingMode ? st.facingMode === 'user' : S.facing === 'user';
+  video.srcObject = stream;
+  try { await video.play(); } catch (e) { /* diabaikan */ }
+  S.mode = 'camera';
+  $('#btnBackCam').hidden = true;
+  const upd = () => {
+    if (video.videoWidth) $('#resInfo').textContent = `${video.videoWidth}×${video.videoHeight}`;
+  };
+  video.onloadedmetadata = upd;
+  upd();
+}
+
+async function flipCamera() {
+  S.facing = S.facing === 'user' ? 'environment' : 'user';
+  saveSettings();
+  await startCamera();
+}
+
+/* ---------- Ambil foto ---------- */
+let audioCtx = null;
+function shutterSound() {
+  if (!S.sound) return;
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const t = audioCtx.currentTime;
+    const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.12, audioCtx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 3);
+    const src = audioCtx.createBufferSource();
+    const g = audioCtx.createGain();
+    g.gain.value = 0.25;
+    src.buffer = buf;
+    src.connect(g).connect(audioCtx.destination);
+    src.start(t);
+  } catch (e) { /* abaikan */ }
+}
+
+function countdown(n) {
+  return new Promise((res) => {
+    const el = $('#count');
+    let i = n;
+    const tick = () => {
+      if (i <= 0) { res(); return; }
+      el.textContent = i;
+      el.classList.remove('show');
+      void el.offsetWidth;
+      el.classList.add('show');
+      i--;
+      setTimeout(tick, 1000);
+    };
+    tick();
+  });
+}
+
+async function grabSource() {
+  if (S.mode === 'image') return { src: S.img, sw: S.img.width, sh: S.img.height, mirror: false };
+  const mirror = S.isFront && S.mirror;
+  if (S.sensor && track && 'ImageCapture' in window) {
+    try {
+      const ic = new ImageCapture(track);
+      const caps = await ic.getPhotoCapabilities();
+      const opt = {};
+      if (caps.imageWidth && caps.imageHeight) { opt.imageWidth = caps.imageWidth.max; opt.imageHeight = caps.imageHeight.max; }
+      const blob = await ic.takePhoto(opt);
+      const bmp = await createImageBitmap(blob);
+      return { src: bmp, sw: bmp.width, sh: bmp.height, mirror };
+    } catch (e) { /* jatuh ke frame video */ }
+  }
+  const sw = video.videoWidth, sh = video.videoHeight;
+  let src = video;
+  try { src = await createImageBitmap(video); } catch (e) { /* pakai video langsung */ }
+  return { src, sw, sh, mirror };
+}
+
+function renderExport({ src, sw, sh, mirror }) {
+  if (!exportR) exportR = new Renderer(document.createElement('canvas'));
+  const { rect, pw, ph } = cropInfo(sw, sh);
+  let scale = 1;
+  if (S.exportSize === 'uhd') scale = 3840 / Math.max(pw, ph);
+  else if (S.exportSize === 'fhd') scale = 1920 / Math.max(pw, ph);
+  let w = pw * scale, h = ph * scale;
+  const maxSide = Math.min(exportR.maxSize, 8192), maxArea = 16e6;
+  const k = Math.min(1, maxSide / Math.max(w, h), Math.sqrt(maxArea / (w * h)));
+  w = Math.max(2, Math.round(w * k)); h = Math.max(2, Math.round(h * k));
+  exportR.draw(src, rect, w, h, S.params, mirror, sw > w * 1.5);
+  const out = document.createElement('canvas');
+  compose(out, exportR.canvas, S.params);
+  return out;
+}
+
+let busy = false;
+async function capture() {
+  if (busy || !glOK) return;
+  if (S.mode === 'camera' && !(video.readyState >= 2 && video.videoWidth)) { toast('Kamera belum siap'); return; }
+  busy = true;
+  $('#btnShutter').classList.add('busy');
+  try {
+    if (S.timer > 0 && S.mode === 'camera') await countdown(S.timer);
+    const f = $('#flash');
+    f.classList.remove('go'); void f.offsetWidth; f.classList.add('go');
+    shutterSound();
+    const source = await grabSource();
+    const out = renderExport(source);
+    const mime = S.format === 'png' ? 'image/png' : 'image/jpeg';
+    const blob = await new Promise((r) => out.toBlob(r, mime, 0.95));
+    if (!blob) throw new Error('Gagal membuat file');
+    addShot(blob, out.width, out.height);
+    if (source.src && source.src.close && source.src !== S.img) source.src.close();
+    out.width = out.height = 0;
+    patCache = { key: '', cv: null }; // lepas memori layer pola ukuran besar
+    toast('Foto tersimpan — tap galeri untuk unduh');
+  } catch (e) {
+    console.error(e);
+    toast('Gagal mengambil foto: ' + (e.message || e));
+  } finally {
+    busy = false;
+    $('#btnShutter').classList.remove('busy');
+  }
+}
+
+/* ---------- Galeri ---------- */
+const shots = [];
+let viewIdx = -1;
+function stamp() {
+  const d = new Date(), p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+}
+function addShot(blob, w, h) {
+  const ext = blob.type === 'image/png' ? 'png' : 'jpg';
+  shots.push({ blob, w, h, url: URL.createObjectURL(blob), name: `cam-awa-${stamp()}.${ext}` });
+  refreshThumb();
+}
+function refreshThumb() {
+  const last = shots[shots.length - 1];
+  $('#thumbImg').src = last ? last.url : '';
+  if (!last) $('#thumbImg').removeAttribute('src');
+  $('#thumbCount').textContent = shots.length || '';
+}
+function openViewer(i) {
+  if (!shots.length) { toast('Belum ada foto'); return; }
+  viewIdx = (i + shots.length) % shots.length;
+  const s = shots[viewIdx];
+  $('#viewerImg').src = s.url;
+  $('#viewerInfo').textContent = `${viewIdx + 1}/${shots.length} • ${s.w}×${s.h} • ${(s.blob.size / 1048576).toFixed(1)} MB`;
+  $('#viewer').hidden = false;
+}
+function download(s) {
+  const a = document.createElement('a');
+  a.href = s.url; a.download = s.name;
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
+/* ---------- UI ---------- */
+function applyPreset(i) {
+  S.preset = i;
+  S.params = { ...BASE, ...PRESETS[i].p };
+  S.dirty = true;
+  document.querySelectorAll('.chip').forEach((c, j) => c.classList.toggle('active', j === i));
+  if (S.tab !== PRESETS[i].c) showTab(PRESETS[i].c);
+  syncControls();
+}
+
+const fmt = (k, v) => (SLIDERS.find((s) => s[0] === k)[4] >= 1 ? Number(v).toFixed(0) : Number(v).toFixed(2));
+
+function showTab(tab) {
+  S.tab = tab;
+  document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === tab));
+  document.querySelectorAll('.chip').forEach((c) => { c.hidden = c.dataset.tab !== tab; });
+}
+
+function syncControls() {
+  SLIDERS.forEach(([k]) => {
+    const inp = $(`#sl-${k}`);
+    if (inp) { inp.value = S.params[k]; inp.nextElementSibling.textContent = fmt(k, S.params[k]); }
+  });
+  $('#setDate').checked = !!S.params.date;
+  $('#setFrame').value = S.params.frame;
+}
+
+function buildUI() {
+  const f = $('#filters');
+  PRESETS.forEach((p, i) => {
+    const b = document.createElement('button');
+    b.className = 'chip';
+    b.dataset.tab = p.c;
+    b.setAttribute('role', 'option');
+    b.innerHTML = `<i style="background:linear-gradient(135deg,${p.sw[0]},${p.sw[1]})">${p.e || ''}</i>${p.name}`;
+    b.onclick = () => { applyPreset(i); b.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' }); };
+    f.appendChild(b);
+  });
+  const tabs = $('#tabs');
+  TABS.forEach((t) => {
+    const b = document.createElement('button');
+    b.className = 'tab';
+    b.dataset.tab = t;
+    b.textContent = t;
+    b.onclick = () => { showTab(t); f.scrollLeft = 0; };
+    tabs.appendChild(b);
+  });
+  showTab(PRESETS[1].c);
+
+  const sl = $('#sliders');
+  SLIDERS.forEach(([k, label, min, max, step]) => {
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML = `<span>${label}</span><input type="range" id="sl-${k}" min="${min}" max="${max}" step="${step}"><output></output>`;
+    sl.appendChild(row);
+    const inp = row.querySelector('input');
+    inp.oninput = () => {
+      S.params[k] = parseFloat(inp.value);
+      inp.nextElementSibling.textContent = fmt(k, S.params[k]);
+      S.dirty = true;
+    };
+  });
+
+  // pengaturan
+  const bind = (id, key, type) => {
+    const el = $(id);
+    if (type === 'check') el.checked = !!S[key]; else el.value = S[key];
+    el.onchange = () => {
+      S[key] = type === 'check' ? el.checked : el.value;
+      saveSettings();
+      S.dirty = true;
+      if (key === 'camRes' && S.mode === 'camera') startCamera();
+    };
+  };
+  bind('#setCamRes', 'camRes'); bind('#setExport', 'exportSize'); bind('#setFormat', 'format');
+  bind('#setRatio', 'ratio'); bind('#setMirror', 'mirror', 'check'); bind('#setGrid', 'grid', 'check');
+  bind('#setSensor', 'sensor', 'check'); bind('#setSound', 'sound', 'check');
+  $('#setGrid').addEventListener('change', () => $('#grid').classList.toggle('on', S.grid));
+  $('#grid').classList.toggle('on', S.grid);
+  $('#setDate').onchange = (e) => { S.params.date = e.target.checked; S.dirty = true; };
+  $('#setFrame').onchange = (e) => { S.params.frame = e.target.value; S.dirty = true; };
+
+  // tombol
+  $('#btnShutter').onclick = capture;
+  $('#btnFlip').onclick = () => { if (S.mode === 'camera') flipCamera(); else toast('Kembali ke kamera dulu'); };
+  $('#btnTimer').onclick = () => {
+    S.timer = S.timer === 0 ? 3 : S.timer === 3 ? 10 : 0;
+    $('#timerLabel').textContent = S.timer;
+    $('#btnTimer').classList.toggle('on', S.timer > 0);
+  };
+  const pick = () => $('#file').click();
+  $('#btnOpen').onclick = pick;
+  $('#btnOpenMsg').onclick = pick;
+  $('#btnRetry').onclick = startCamera;
+  $('#btnBackCam').onclick = () => { S.img = null; startCamera(); };
+  $('#file').onchange = async (e) => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      S.img = await createImageBitmap(file);
+    } catch (err) {
+      toast('Gambar tidak bisa dibuka'); return;
+    }
+    stopCamera();
+    S.mode = 'image';
+    S.dirty = true;
+    $('#msg').hidden = true;
+    $('#btnBackCam').hidden = false;
+    $('#resInfo').textContent = `${S.img.width}×${S.img.height}`;
+  };
+  $('#btnReset').onclick = () => applyPreset(S.preset);
+
+  const sheet = (id) => {
+    const el = $(id);
+    ['#adjust', '#settings'].forEach((o) => { if (o !== id) $(o).hidden = true; });
+    el.hidden = !el.hidden;
+  };
+  $('#btnAdjust').onclick = () => sheet('#adjust');
+  $('#btnSettings').onclick = () => sheet('#settings');
+  document.querySelectorAll('[data-close]').forEach((b) => {
+    b.onclick = () => { $('#adjust').hidden = true; $('#settings').hidden = true; $('#viewer').hidden = true; };
+  });
+
+  $('#btnGallery').onclick = () => openViewer(shots.length - 1);
+  $('#vPrev').onclick = () => openViewer(viewIdx - 1);
+  $('#vNext').onclick = () => openViewer(viewIdx + 1);
+  $('#vDownload').onclick = () => download(shots[viewIdx]);
+  $('#vShare').onclick = async () => {
+    const s = shots[viewIdx];
+    const file = new File([s.blob], s.name, { type: s.blob.type });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: 'Cam-Awa' }); } catch (e) { /* dibatalkan */ }
+    } else toast('Berbagi tidak didukung, gunakan Unduh');
+  };
+  $('#vDelete').onclick = () => {
+    const s = shots.splice(viewIdx, 1)[0];
+    URL.revokeObjectURL(s.url);
+    refreshThumb();
+    if (!shots.length) $('#viewer').hidden = true; else openViewer(Math.min(viewIdx, shots.length - 1));
+  };
+
+  document.addEventListener('keydown', (e) => {
+    if (e.target.matches('input,select,textarea')) return;
+    if (e.code === 'Space') { e.preventDefault(); if ($('#viewer').hidden) capture(); }
+    if (e.key === 'Escape') document.querySelectorAll('[data-close]')[0].click();
+    if (!$('#viewer').hidden) {
+      if (e.key === 'ArrowLeft') openViewer(viewIdx - 1);
+      if (e.key === 'ArrowRight') openViewer(viewIdx + 1);
+    }
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { if (S.mode === 'camera') stopCamera(); }
+    else if (S.mode === 'camera' && !stream) startCamera();
+  });
+}
+
+/* ---------- Mulai ---------- */
+(function init() {
+  buildUI();
+  applyPreset(1); // mulai dengan Digicam 2000s
+  try {
+    previewR = new Renderer(document.createElement('canvas'));
+  } catch (e) {
+    glOK = false;
+    showMsg('Browser ini belum mendukung WebGL2, yang dibutuhkan untuk filter. Coba Chrome, Edge, Firefox, atau Safari versi terbaru.');
+    return;
+  }
+  requestAnimationFrame(frame);
+  startCamera();
+})();
