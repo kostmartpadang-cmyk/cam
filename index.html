@@ -32,6 +32,10 @@
       </div>
     </div>
     <button class="back-cam" id="btnBackCam" hidden>← Kembali ke kamera</button>
+    <div class="date-pills">
+      <button class="pill" id="btnDate" aria-label="Sertakan tanggal di foto"><svg data-i="calendar"></svg><span>Tanggal</span></button>
+      <button class="pill" id="btnDateStyle" aria-label="Ganti gaya tanggal"></button>
+    </div>
   </main>
 
   <section class="panel">
@@ -101,7 +105,17 @@
       </select>
     </label>
     <label class="check"><input type="checkbox" id="setEco"> Mode hemat <small>(pratinjau lebih kecil &amp; 24 fps agar lancar; hasil foto tetap kualitas penuh)</small></label>
-    <label class="check"><input type="checkbox" id="setDate"> Cap tanggal ala digicam</label>
+    <label class="check"><input type="checkbox" id="setDate"> Sertakan tanggal di foto</label>
+    <label>Gaya tanggal
+      <select id="setDateStyle">
+        <option value="minimal">Minimal — putih, rapi di tengah bawah</option>
+        <option value="digicam">Digicam — oranye 'tahun bulan tanggal</option>
+        <option value="elegan">Elegan — miring bergaya serif</option>
+        <option value="tulisan">Tulisan tangan — kiri bawah</option>
+        <option value="film">Film — oranye dengan jam</option>
+      </select>
+    </label>
+    <p class="hint">Dengan bingkai Polaroid, tanggal otomatis ditulis tangan di bagian putih bawah.</p>
     <label class="check"><input type="checkbox" id="setMirror"> Cerminkan kamera depan</label>
     <label class="check"><input type="checkbox" id="setGrid"> Garis bantu (grid)</label>
     <label class="check"><input type="checkbox" id="setSensor"> Kualitas maksimal <small>(saat jepret, kamera naik sebentar ke resolusi tertinggi: lebih tajam tapi lebih lambat dan pratinjau berkedip sesaat)</small></label>

@@ -13,6 +13,7 @@ const ICONS = {
   download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
   share: '<path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/>',
   trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>',
+  calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
   x: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
 };
 document.querySelectorAll('svg[data-i]').forEach((el) => {
@@ -653,11 +654,14 @@ const S = {
   grid: false,
   sensor: false, // kualitas maksimal (lebih lambat) — opsional di Pengaturan
   eco: matchMedia('(pointer:coarse)').matches, // mode hemat: pratinjau 720 px, 24 fps
+  date: true, // cap tanggal pada foto (bisa dimatikan langsung di layar kamera)
+  dateStyle: 'minimal',
+  imgDate: 0,
   sound: true,
   timer: 0,
   dirty: true,
 };
-const SAVED_KEYS = ['camRes', 'exportSize', 'format', 'ratio', 'mirror', 'grid', 'sensor', 'sound', 'facing', 'eco'];
+const SAVED_KEYS = ['camRes', 'exportSize', 'format', 'ratio', 'mirror', 'grid', 'sensor', 'sound', 'facing', 'eco', 'date', 'dateStyle'];
 try {
   const sv = JSON.parse(localStorage.getItem('camawa4') || '{}');
   SAVED_KEYS.forEach((k) => { if (k in sv) S[k] = sv[k]; });
@@ -740,33 +744,98 @@ function compose(dst, glc, p) {
   ctx.drawImage(glc, ox, oy, w, h);
   const ov = overlayLayer(p, w, h);
   if (ov) ctx.drawImage(ov, ox, oy, w, h);
-  if (p.date && (!ov || ov.width < w)) drawDate(ctx, w, h, ox, oy);
+  if (p.date) {
+    if (p.frame === 'polaroid') drawPolaroidDate(ctx, w, h, ox, oy, p);
+    else if (!(ov && ov.width === w)) drawDate(ctx, w, h, ox, oy, p); // overlay resolusi penuh sudah memuat tanggal
+  }
 }
 
 // Pola & stiker digambar SEKALI dengan resolusi rendah (maks 1400 px, cukup karena memang buram) lalu
 // diskalakan. Cap tanggal digambar tajam langsung di ukuran akhir.
-function drawDate(ctx, w, h, ox, oy) {
-  const d = new Date(), pad = (n) => String(n).padStart(2, '0');
-  const t = "'" + String(d.getFullYear()).slice(2) + ' ' + pad(d.getMonth() + 1) + ' ' + pad(d.getDate());
-  const fs = Math.max(12, Math.round(h * 0.036));
+const BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+const DATE_STYLES = { minimal: 'Minimal', digicam: 'Digicam', elegan: 'Elegan', tulisan: 'Tulisan tangan', film: 'Film' };
+const HAND_FONT = '"Segoe Script","Bradley Hand","Brush Script MT","Dancing Script",cursive';
+
+// teks dengan jarak antar huruf (letter-spacing) yang bekerja di semua browser
+function spaced(ctx, text, x, y, sp, align) {
+  const chars = [...text], ws = chars.map((ch) => ctx.measureText(ch).width);
+  const total = ws.reduce((t, v) => t + v, 0) + sp * (chars.length - 1);
+  let cx = align === 'center' ? x - total / 2 : align === 'right' ? x - total : x;
+  const prev = ctx.textAlign;
+  ctx.textAlign = 'left';
+  chars.forEach((ch, i) => { ctx.fillText(ch, cx, y); cx += ws[i] + sp; });
+  ctx.textAlign = prev;
+}
+
+function dateParts(p) {
+  const d = new Date((p && p.dateTime) || Date.now()), pad = (n) => String(n).padStart(2, '0');
+  return { d, dd: pad(d.getDate()), mm: pad(d.getMonth() + 1), yy: String(d.getFullYear()).slice(2), yyyy: d.getFullYear(),
+           hh: pad(d.getHours()), mi: pad(d.getMinutes()) };
+}
+
+// tanggal di dalam area foto (ox,oy = sudut kiri-atas foto, w,h = ukuran foto)
+function drawDate(ctx, w, h, ox, oy, p) {
+  const t = dateParts(p), u = Math.min(w, h), st = (p && p.dateStyle) || 'minimal';
   ctx.save();
-  ctx.font = 'bold ' + fs + 'px "Courier New", monospace';
-  ctx.textAlign = 'right';
   ctx.textBaseline = 'alphabetic';
-  ctx.shadowColor = 'rgba(255,110,0,.85)';
-  ctx.shadowBlur = fs * 0.4;
-  ctx.fillStyle = '#ff9d2e';
-  ctx.fillText(t, ox + w - fs * 0.9, oy + h - fs * 0.9);
+  if (st === 'digicam' || st === 'film') {
+    const fs = Math.max(12, Math.round(u * 0.05));
+    ctx.font = 'bold ' + fs + 'px "Courier New", monospace';
+    ctx.textAlign = 'right';
+    ctx.shadowColor = 'rgba(255,110,0,.85)'; ctx.shadowBlur = fs * 0.4;
+    ctx.fillStyle = '#ff9d2e';
+    const txt = "'" + t.yy + ' ' + t.mm + ' ' + t.dd + (st === 'film' ? '   ' + t.hh + ':' + t.mi : '');
+    ctx.fillText(txt, ox + w - fs * 0.9, oy + h - fs * 0.9);
+  } else if (st === 'minimal') {
+    const fs = Math.max(11, Math.round(u * 0.03));
+    ctx.font = '300 ' + fs + 'px "Helvetica Neue",Helvetica,Arial,sans-serif';
+    ctx.shadowColor = 'rgba(0,0,0,.4)'; ctx.shadowBlur = fs * 0.6;
+    ctx.fillStyle = 'rgba(255,255,255,.95)';
+    spaced(ctx, t.dd + ' · ' + t.mm + ' · ' + t.yyyy, ox + w / 2, oy + h - fs * 1.8, fs * 0.38, 'center');
+  } else if (st === 'elegan') {
+    const fs = Math.max(12, Math.round(u * 0.042));
+    ctx.font = 'italic ' + fs + 'px Georgia,"Times New Roman",serif';
+    ctx.textAlign = 'right';
+    ctx.shadowColor = 'rgba(0,0,0,.45)'; ctx.shadowBlur = fs * 0.5;
+    ctx.fillStyle = '#fff6e6';
+    ctx.fillText(t.d.getDate() + ' ' + BULAN[t.d.getMonth()] + ' ' + t.yyyy, ox + w - fs * 0.9, oy + h - fs * 0.9);
+  } else { // tulisan tangan
+    const fs = Math.max(14, Math.round(u * 0.062));
+    ctx.font = fs + 'px ' + HAND_FONT;
+    ctx.textAlign = 'left';
+    ctx.shadowColor = 'rgba(0,0,0,.4)'; ctx.shadowBlur = fs * 0.35;
+    ctx.fillStyle = '#ffffff';
+    ctx.translate(ox + fs * 0.8, oy + h - fs * 0.8);
+    ctx.rotate(-0.05);
+    ctx.fillText(t.d.getDate() + ' ' + BULAN[t.d.getMonth()].slice(0, 3) + ' ' + t.yyyy, 0, 0);
+  }
   ctx.restore();
 }
 
+// bingkai Polaroid: tanggal ditulis tangan di bagian putih bawah
+function drawPolaroidDate(ctx, w, h, ox, oy, p) {
+  const t = dateParts(p), strip = Math.round(w * 0.17), fs = Math.round(strip * 0.34);
+  ctx.save();
+  ctx.font = fs + 'px ' + HAND_FONT;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#3b342e';
+  ctx.translate(ox + w / 2, oy + h + strip * 0.5);
+  ctx.rotate(-0.03);
+  ctx.fillText(t.d.getDate() + ' ' + BULAN[t.d.getMonth()] + ' ' + t.yyyy, 0, 0);
+  ctx.restore();
+}
+
+// Pola & stiker digambar SEKALI dengan resolusi rendah (maks 1400 px, cukup karena memang buram) lalu
+// diskalakan. Tanggal digambar tajam di ukuran akhir (di overlay hanya bila ukurannya tidak diperkecil).
 let ovCache = { key: '', cv: null };
 function overlayLayer(p, w, h) {
   const hasPat = p.pat && PATTERNS[p.pat], hasDeco = p.deco && DECO[p.deco];
   const k = Math.min(1, 1400 / Math.max(w, h));
-  if (!hasPat && !hasDeco && !(p.date && k === 1)) return null;
+  const dateHere = p.date && k === 1 && p.frame !== 'polaroid';
+  if (!hasPat && !hasDeco && !dateHere) return null;
   const lw = Math.round(w * k), lh = Math.round(h * k);
-  const key = [p.pat, p.deco, p.date, lw, lh, new Date().toDateString()].join('|');
+  const key = [p.pat, p.deco, dateHere, p.dateStyle, Math.floor(((p.dateTime) || Date.now()) / 60000), lw, lh].join('|');
   if (ovCache.key === key) return ovCache.cv;
   const cv = document.createElement('canvas');
   cv.width = lw; cv.height = lh;
@@ -786,7 +855,7 @@ function overlayLayer(p, w, h) {
       ctx.restore();
     });
   }
-  if (p.date && k === 1) drawDate(ctx, lw, lh, 0, 0);
+  if (dateHere) drawDate(ctx, lw, lh, 0, 0, p);
   ovCache = { key, cv };
   return cv;
 }
@@ -1132,7 +1201,8 @@ async function capture() {
     $('#btnShutter').classList.remove('busy');
   }
   // simpan snapshot pengaturan supaya tidak berubah kalau filter diganti saat diproses
-  const shot = { ...source, params: { ...S.params }, ratio: S.ratio, exportSize: S.exportSize, format: S.format };
+  const when = S.mode === 'image' && S.imgDate ? S.imgDate : Date.now(); // foto dari galeri memakai tanggal filenya
+  const shot = { ...source, params: { ...S.params, dateTime: when }, ratio: S.ratio, exportSize: S.exportSize, format: S.format };
   pendingSaves++;
   toast(pendingSaves > 1 ? 'Memproses ' + pendingSaves + ' foto…' : 'Memproses foto…');
   exportChain = exportChain.then(() => saveShot(shot));
@@ -1230,7 +1300,8 @@ async function exportCurrent(mode) {
 /* ---------- UI ---------- */
 function applyPreset(i) {
   S.preset = i;
-  S.params = { ...BASE, ...PRESETS[i].p };
+  S.params = { ...BASE, ...PRESETS[i].p, date: S.date, dateStyle: S.dateStyle };
+  if (S.mode === 'image' && S.imgDate) S.params.dateTime = S.imgDate;
   S.dirty = true;
   document.querySelectorAll('.chip').forEach((c, j) => c.classList.toggle('active', j === i));
   if (S.tab !== PRESETS[i].c) showTab(PRESETS[i].c);
@@ -1245,12 +1316,30 @@ function showTab(tab) {
   document.querySelectorAll('.chip').forEach((c) => { c.hidden = c.dataset.tab !== tab; });
 }
 
+function syncDateUI() {
+  $('#btnDate').classList.toggle('on', S.date);
+  $('#btnDate span').textContent = S.date ? 'Tanggal: ON' : 'Tanggal: OFF';
+  $('#btnDateStyle').hidden = !S.date;
+  $('#btnDateStyle').textContent = DATE_STYLES[S.dateStyle] + ' ›';
+  $('#setDate').checked = S.date;
+  $('#setDateStyle').value = S.dateStyle;
+}
+function setDate(on) {
+  S.date = on; S.params.date = on; S.dirty = true;
+  saveSettings(); syncDateUI();
+  toast(on ? 'Tanggal akan ikut di foto' : 'Tanggal tidak ikut di foto');
+}
+function setDateStyle(st) {
+  S.dateStyle = st; S.params.dateStyle = st; S.dirty = true;
+  saveSettings(); syncDateUI();
+}
+
 function syncControls() {
   SLIDERS.forEach(([k]) => {
     const inp = $(`#sl-${k}`);
     if (inp) { inp.value = S.params[k]; inp.nextElementSibling.textContent = fmt(k, S.params[k]); }
   });
-  $('#setDate').checked = !!S.params.date;
+  syncDateUI();
   $('#setFrame').value = S.params.frame;
 }
 
@@ -1308,7 +1397,13 @@ function buildUI() {
   $('#setEco').addEventListener('change', () => { PERF.max = perfCeil(); });
   $('#setGrid').addEventListener('change', () => $('#grid').classList.toggle('on', S.grid));
   $('#grid').classList.toggle('on', S.grid);
-  $('#setDate').onchange = (e) => { S.params.date = e.target.checked; S.dirty = true; };
+  $('#setDate').onchange = (e) => setDate(e.target.checked);
+  $('#setDateStyle').onchange = (e) => setDateStyle(e.target.value);
+  $('#btnDate').onclick = () => setDate(!S.date);
+  $('#btnDateStyle').onclick = () => {
+    const keys = Object.keys(DATE_STYLES);
+    setDateStyle(keys[(keys.indexOf(S.dateStyle) + 1) % keys.length]);
+  };
   $('#setFrame').onchange = (e) => { S.params.frame = e.target.value; S.dirty = true; };
 
   // tombol
@@ -1323,13 +1418,15 @@ function buildUI() {
   $('#btnOpen').onclick = pick;
   $('#btnOpenMsg').onclick = pick;
   $('#btnRetry').onclick = startCamera;
-  $('#btnBackCam').onclick = () => { S.img = null; startCamera(); };
+  $('#btnBackCam').onclick = () => { S.img = null; S.imgDate = 0; delete S.params.dateTime; startCamera(); };
   $('#file').onchange = async (e) => {
     const file = e.target.files[0];
     e.target.value = '';
     if (!file) return;
     try {
       S.img = await createImageBitmap(file);
+      S.imgDate = file.lastModified || Date.now();
+      S.params.dateTime = S.imgDate;
     } catch (err) {
       toast('Gambar tidak bisa dibuka'); return;
     }
