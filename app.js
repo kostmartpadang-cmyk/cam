@@ -625,18 +625,18 @@ const S = {
   mirror: true,
   grid: false,
   sensor: matchMedia('(pointer:coarse)').matches && 'ImageCapture' in window,
-  eco: matchMedia('(pointer:coarse)').matches, // mode hemat: pratinjau 640 px, 24 fps
+  eco: matchMedia('(pointer:coarse)').matches, // mode hemat: pratinjau 720 px, 24 fps
   sound: true,
   timer: 0,
   dirty: true,
 };
 const SAVED_KEYS = ['camRes', 'exportSize', 'format', 'ratio', 'mirror', 'grid', 'sensor', 'sound', 'facing', 'eco'];
 try {
-  const sv = JSON.parse(localStorage.getItem('camawa') || '{}');
+  const sv = JSON.parse(localStorage.getItem('camawa2') || '{}');
   SAVED_KEYS.forEach((k) => { if (k in sv) S[k] = sv[k]; });
 } catch (e) { /* abaikan */ }
 const saveSettings = () => {
-  try { localStorage.setItem('camawa', JSON.stringify(Object.fromEntries(SAVED_KEYS.map((k) => [k, S[k]])))); } catch (e) { /* abaikan */ }
+  try { localStorage.setItem('camawa2', JSON.stringify(Object.fromEntries(SAVED_KEYS.map((k) => [k, S[k]])))); } catch (e) { /* abaikan */ }
 };
 
 const view = $('#view');
@@ -759,7 +759,7 @@ function overlayLayer(p, w, h) {
 
 /* ---------- Loop pratinjau ---------- */
 // Resolusi pratinjau menyesuaikan diri: turun otomatis kalau perangkat kewalahan.
-const perfCeil = () => (S.eco ? 640 : matchMedia('(pointer:coarse)').matches ? 960 : 1280);
+const perfCeil = () => (S.eco ? 720 : matchMedia('(pointer:coarse)').matches ? 960 : 1280);
 const PERF = { max: perfCeil(), last: 0, drawn: 0, ema: 16, calm: 0, cool: 0 };
 let newFrame = true;
 const hasRVFC = 'requestVideoFrameCallback' in HTMLVideoElement.prototype;
@@ -808,8 +808,8 @@ function frame(now) {
   const w = Math.max(2, Math.round(pw * sc)), h = Math.max(2, Math.round(ph * sc));
   const mirror = S.mode === 'camera' && S.isFront && S.mirror;
   try {
-    // mipmap hanya untuk foto diam; untuk video terlalu mahal tiap frame
-    previewR.draw(src, rect, w, h, S.params, mirror, S.mode === 'image' && sw > w * 1.6);
+    // mipmap saat sumber jauh lebih besar dari pratinjau (mencegah gerigi/glitch)
+    previewR.draw(src, rect, w, h, S.params, mirror, sw > w * 1.4);
     // tanpa bingkai/overlay: tampilkan canvas WebGL langsung (hemat satu salinan per frame)
     const p = S.params, gc = previewR.canvas;
     const plain = p.frame === 'none' && !(p.pat && PATTERNS[p.pat]) && !(p.deco && DECO[p.deco]) && !p.date;
@@ -847,7 +847,12 @@ async function startCamera() {
   try {
     stream = await navigator.mediaDevices.getUserMedia({
       audio: false,
-      video: { facingMode: { ideal: S.facing }, width: { ideal: rw }, height: { ideal: rh } },
+      video: {
+        facingMode: { ideal: S.facing },
+        // Full HD/HD: batasi agar kamera tidak diam-diam memakai 4K (berat & pratinjau bergerigi)
+        width: S.camRes === 'fhd' || S.camRes === 'hd' ? { ideal: rw, max: 2560 } : { ideal: rw },
+        height: S.camRes === 'fhd' || S.camRes === 'hd' ? { ideal: rh, max: 2560 } : { ideal: rh },
+      },
     });
   } catch (e) {
     const denied = e && (e.name === 'NotAllowedError' || e.name === 'SecurityError');
