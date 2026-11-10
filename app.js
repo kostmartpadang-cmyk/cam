@@ -981,10 +981,11 @@ if (hasRVFC) {
 
 // Turun cepat bila tersendat, naik sangat hati-hati (tiap perubahan ukuran canvas = hentakan kecil).
 function camDown() {
-  if (PERF.camDowned || !track || S.mode !== 'camera' || video.videoWidth <= 1300) return false;
+  const vw = video.videoWidth, vh = video.videoHeight, long = Math.max(vw, vh);
+  if (PERF.camDowned || !track || S.mode !== 'camera' || long <= 1300) return false;
   PERF.camDowned = true;
-  const asp = video.videoWidth / video.videoHeight;
-  track.applyConstraints({ width: { ideal: 1280 }, height: { ideal: Math.round(1280 / asp) } })
+  const k = 1280 / long; // kecilkan dengan mempertahankan arah (potret/landscape) & bentuk
+  track.applyConstraints({ width: { ideal: Math.round(vw * k) }, height: { ideal: Math.round(vh * k) } })
     .then(() => toast('Kamera diturunkan ke HD supaya lancar')).catch(() => {});
   return true;
 }
@@ -1100,8 +1101,14 @@ function camSize() {
   const rw = (RES[S.camRes] || RES.fhd)[0], asp = streamAspect();
   const cap = S.camRes === 'fhd' || S.camRes === 'hd'; // jangan diam-diam memakai 4K
   const dim = (v) => (cap ? { ideal: v, max: 2560 } : { ideal: v });
-  return { width: dim(rw), height: dim(Math.round(rw / asp)), aspectRatio: { ideal: asp }, frameRate: { ideal: 30 } };
+  // HP dipegang tegak -> minta frame POTRET (tinggi > lebar), seperti kamera bawaan; kalau tidak, banyak HP mengirim frame landscape
+  const portrait = isPortrait(), long = rw, short = Math.round(rw / asp);
+  return {
+    width: dim(portrait ? short : long), height: dim(portrait ? long : short),
+    aspectRatio: { ideal: portrait ? 1 / asp : asp }, frameRate: { ideal: 30 },
+  };
 }
+const isPortrait = () => window.innerHeight > window.innerWidth;
 
 function showMsg(text) {
   $('#msgText').textContent = text;
@@ -1942,6 +1949,15 @@ function buildUI() {
       if (e.key === 'ArrowLeft') openViewer(viewIdx - 1);
       if (e.key === 'ArrowRight') openViewer(viewIdx + 1);
     }
+  });
+  // putar HP: minta ulang kamera dengan orientasi yang sesuai (ditunda sebentar agar ukuran layar sudah final)
+  let lastPortrait = isPortrait(), rotT = 0;
+  window.addEventListener('resize', () => {
+    clearTimeout(rotT);
+    rotT = setTimeout(() => {
+      const p = isPortrait();
+      if (p !== lastPortrait) { lastPortrait = p; if (S.mode === 'camera' && !REC.on && stream) startCamera(); }
+    }, 350);
   });
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) { stopRecording(); if (S.mode === 'camera') stopCamera(); }
