@@ -4,6 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0e0d0c">
+<meta name="color-scheme" content="dark">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.webmanifest">
 <title>Cam-Awa — Kamera Digicam & Vintage</title>
 <meta name="description" content="Kamera web dengan filter digicam, vintage jernih, film, dan Ultra HD. Ambil foto langsung dari browser dan unduh.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23161412'/%3E%3Ccircle cx='32' cy='34' r='15' fill='none' stroke='%23ffb454' stroke-width='5'/%3E%3Ccircle cx='32' cy='34' r='6' fill='%23ffb454'/%3E%3Crect x='20' y='12' width='14' height='6' rx='2' fill='%23ffb454'/%3E%3C/svg%3E">
@@ -46,7 +51,7 @@
 
     <div class="modes"><button id="mdFoto" class="on">Foto</button><button id="mdVideo">Video</button></div>
     <div class="bar">
-      <button class="thumb-btn" id="btnGallery" aria-label="Galeri"><img id="thumbImg" alt=""><span id="thumbCount"></span></button>
+      <button class="thumb-btn" id="btnGallery" aria-label="Galeri"><img id="thumbImg" alt="" decoding="async"><span id="thumbCount"></span></button>
       <button class="icon-btn" id="btnTimer" aria-label="Timer"><svg class="i" data-i="clock"></svg><b id="timerLabel">0</b></button>
       <button class="shutter" id="btnShutter" aria-label="Ambil foto"><i></i></button>
       <button class="icon-btn" id="btnFlip" aria-label="Ganti kamera"><svg class="i" data-i="flip"></svg></button>
@@ -138,7 +143,7 @@
     <span id="viewerInfo"></span>
     <button class="icon-btn" data-close aria-label="Tutup"><svg class="i" data-i="x"></svg></button>
   </div>
-  <div class="viewer-img"><img id="viewerImg" alt="Hasil foto"><video id="viewerVid" controls playsinline hidden></video></div>
+  <div class="viewer-img"><img id="viewerImg" alt="Hasil foto" decoding="async"><video id="viewerVid" controls playsinline hidden></video></div>
   <div class="viewer-bar">
     <button class="btn ghost" id="vPrev">‹</button>
     <button class="btn" id="vDownload"><svg class="i" data-i="download"></svg> Unduh</button>
@@ -150,7 +155,8 @@
 
 <div id="saving" hidden role="status"><div class="spin sm"></div><span id="savingText"></span></div>
 <div id="loading" hidden role="status" aria-live="polite"><div class="spin"></div><span id="loadingText">Memproses…</span></div>
-<div id="toast"></div>
+<div id="toast" role="status" aria-live="polite"></div>
+<noscript>Cam-Awa membutuhkan JavaScript.</noscript>
 <script src="app.js"></script>
 </body>
 </html>

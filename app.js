@@ -528,6 +528,18 @@ const UNIFORMS = {
 class Renderer {
   constructor(canvas) {
     this.canvas = canvas;
+    this.lost = false;
+    // GPU mobile sering membuang konteks saat aplikasi di latar belakang: pulihkan, jangan layar hitam
+    canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); this.lost = true; });
+    canvas.addEventListener('webglcontextrestored', () => {
+      try { this.setup(); this.lost = false; if (typeof S !== 'undefined') S.dirty = true; } catch (err) { console.error(err); }
+    });
+    this.setup();
+  }
+  setup() {
+    const canvas = this.canvas;
+    this.loc = {};
+    this.tw = this.th = 0;
     const gl = canvas.getContext('webgl2', {
       alpha: false, antialias: false, depth: false, stencil: false, powerPreference: 'high-performance',
     });
@@ -547,7 +559,6 @@ class Renderer {
     if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
     gl.useProgram(prog);
     this.prog = prog;
-    this.loc = {};
     this.vao = gl.createVertexArray();
     gl.bindVertexArray(this.vao);
     this.tex = gl.createTexture();
@@ -562,6 +573,7 @@ class Renderer {
     return this.loc[name];
   }
   draw(src, rect, w, h, p, mirror, mip) {
+    if (this.lost) return false;
     const gl = this.gl;
     if (this.canvas.width !== w || this.canvas.height !== h) {
       this.canvas.width = w;
@@ -597,6 +609,7 @@ class Renderer {
     gl.uniform3fv(this.u('uShadow'), p.shadow);
     gl.uniform3fv(this.u('uHigh'), p.high);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
+    return true;
   }
 }
 
@@ -635,6 +648,7 @@ const saveSettings = () => {
 };
 
 const view = $('#view');
+const elStage = $('#stage'), elGrid = $('#grid'), elFlash = $('#flash'), elViewer = $('#viewer');
 const vctx = view.getContext('2d');
 const video = document.createElement('video');
 video.playsInline = true;
@@ -866,9 +880,9 @@ function updateOverlayEl(p, w, h) {
   ovl.hidden = false;
 }
 
-let fitKey = '';
+let fitKey = '', ovW = 0, ovH = 0, ovT = 0;
 function fitView() {
-  const st = $('#stage'), gc = previewR.canvas;
+  const st = elStage, gc = previewR.canvas;
   const cur = gc.hidden ? view : gc;
   if (!cur.width || !cur.height) return;
   const cw = st.clientWidth, ch = st.clientHeight, a = cur.width / cur.height;
@@ -876,13 +890,16 @@ function fitView() {
   if (key === fitKey) return;
   fitKey = key;
   const w = Math.min(cw, ch * a), h = w / a;
-  [view, gc, ovl, $('#grid'), $('#flash')].forEach((el) => { el.style.width = w + 'px'; el.style.height = h + 'px'; });
+  [view, gc, ovl, elGrid, elFlash].forEach((el) => { el.style.width = w + 'px'; el.style.height = h + 'px'; });
 }
-window.addEventListener('resize', () => { fitKey = ''; S.dirty = true; });
+// ResizeObserver lebih akurat di HP (bilah alamat naik-turun, rotasi layar) daripada event resize
+if ('ResizeObserver' in window) new ResizeObserver(() => { fitKey = ''; S.dirty = true; }).observe(elStage);
+else window.addEventListener('resize', () => { fitKey = ''; S.dirty = true; });
 
 function frame(now) {
   requestAnimationFrame(frame);
-  if (!glOK) return;
+  if (!glOK || previewR.lost) return;
+  if (!elViewer.hidden && !REC.on) return; // galeri menutupi layar: jangan buang GPU/baterai
   tunePerf(now);
   let src = null;
   if (S.mode === 'camera') {
@@ -897,6 +914,7 @@ function frame(now) {
   if (S.eco && S.mode === 'camera' && !S.dirty && now - PERF.drawn < 40) return; // mode hemat: maks ~24 fps
   PERF.drawn = now;
   newFrame = false;
+  const wasDirty = S.dirty;
   S.dirty = false;
   const [sw, sh] = srcSize();
   const { rect, pw, ph } = cropInfo(sw, sh);
@@ -905,12 +923,14 @@ function frame(now) {
   const mirror = S.mode === 'camera' && S.isFront && S.mirror;
   try {
     // mipmap saat sumber jauh lebih besar dari pratinjau (mencegah gerigi/glitch)
-    previewR.draw(src, rect, w, h, S.params, mirror, sw > w * 1.4);
+    // (ambang 2x: generateMipmap tiap frame mahal di GPU HP, selisih visual kecil di bawah 2x)
+    if (!previewR.draw(src, rect, w, h, S.params, mirror, sw > w * 2)) return;
     // tanpa bingkai/overlay: tampilkan canvas WebGL langsung (hemat satu salinan per frame)
     const p = S.params, gc = previewR.canvas;
     if (p.frame === 'none') {
       gc.hidden = false; view.hidden = true; // tampilkan canvas WebGL langsung
-      updateOverlayEl(p, w, h);
+      // lapisan stiker/tanggal hanya dihitung ulang bila perlu (bukan membuat string kunci tiap frame)
+      if (wasDirty || w !== ovW || h !== ovH || now - ovT > 1000) { ovW = w; ovH = h; ovT = now; updateOverlayEl(p, w, h); }
     } else { // bingkai Polaroid/film: perlu digabung (lebih berat)
       compose(view, gc, p);
       view.hidden = false; gc.hidden = true; ovl.hidden = true;
@@ -943,12 +963,15 @@ function showMsg(text) {
 }
 
 function stopCamera() {
+  if (track) track.onended = null;
   if (stream) stream.getTracks().forEach((t) => t.stop());
   stream = null; track = null;
   video.srcObject = null;
 }
 
+let camGen = 0;
 async function startCamera() {
+  const gen = ++camGen;
   stopCamera();
   $('#msg').hidden = true;
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -957,11 +980,14 @@ async function startCamera() {
   }
   S.streamAsp = streamAspect();
   try {
-    stream = await navigator.mediaDevices.getUserMedia({
+    const st0 = await navigator.mediaDevices.getUserMedia({
       audio: false,
       video: { facingMode: { ideal: S.facing }, ...camSize() },
     });
+    if (gen !== camGen || S.mode !== 'camera') { st0.getTracks().forEach((t) => t.stop()); return; } // ada permintaan lebih baru
+    stream = st0;
   } catch (e) {
+    if (gen !== camGen) return;
     const denied = e && (e.name === 'NotAllowedError' || e.name === 'SecurityError');
     showMsg(denied
       ? 'Izin kamera ditolak. Aktifkan izin kamera untuk situs ini di pengaturan browser, lalu coba lagi.'
@@ -969,6 +995,11 @@ async function startCamera() {
     return;
   }
   track = stream.getVideoTracks()[0];
+  track.onended = () => {
+    if (gen !== camGen || S.mode !== 'camera') return;
+    stopRecording();
+    showMsg('Kamera terputus (mungkin dipakai aplikasi lain atau ada panggilan masuk). Tekan "Coba lagi".');
+  };
   if (S.camRes === 'max' && track.getCapabilities) {
     try {
       const caps = track.getCapabilities();
@@ -979,6 +1010,7 @@ async function startCamera() {
   }
   const st = track.getSettings ? track.getSettings() : {};
   S.isFront = st.facingMode ? st.facingMode === 'user' : S.facing === 'user';
+  if (gen !== camGen) return;
   video.srcObject = stream;
   try { await video.play(); } catch (e) { /* diabaikan */ }
   S.mode = 'camera';
@@ -1121,10 +1153,15 @@ function shutterSound() {
   if (!S.sound) return;
   try {
     audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
     const t = audioCtx.currentTime;
-    const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.12, audioCtx.sampleRate);
-    const d = buf.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 3);
+    if (!shutterSound.buf) {
+      const nb = audioCtx.createBuffer(1, Math.round(audioCtx.sampleRate * 0.12), audioCtx.sampleRate);
+      const d = nb.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 3);
+      shutterSound.buf = nb;
+    }
+    const buf = shutterSound.buf;
     const src = audioCtx.createBufferSource();
     const g = audioCtx.createGain();
     g.gain.value = 0.25;
@@ -1216,7 +1253,7 @@ async function grabSource() {
 }
 
 function renderExport({ src, sw, sh, mirror, params, ratio, exportSize }) {
-  if (!exportR) exportR = new Renderer(document.createElement('canvas'));
+  if (!exportR || exportR.lost) exportR = new Renderer(document.createElement('canvas'));
   const { rect, pw, ph } = cropInfo(sw, sh, ratio);
   let scale = 1;
   if (exportSize === 'gallery') scale = Math.min(1, 1920 / Math.max(pw, ph));
@@ -1610,13 +1647,23 @@ function buildUI() {
   $('#btnOpen').onclick = pick;
   $('#btnOpenMsg').onclick = pick;
   $('#btnRetry').onclick = startCamera;
-  $('#btnBackCam').onclick = () => { S.img = null; S.imgDate = 0; delete S.params.dateTime; startCamera(); };
+  $('#btnBackCam').onclick = () => {
+    S.mode = 'camera'; S.img = null; S.imgDate = 0; delete S.params.dateTime; startCamera();
+  };
   $('#file').onchange = async (e) => {
     const file = e.target.files[0];
     e.target.value = '';
     if (!file) return;
     try {
-      S.img = await createImageBitmap(file);
+      let bmp = await createImageBitmap(file);
+      const lim = Math.min(previewR ? previewR.maxSize : 4096, 8192), big = Math.max(bmp.width, bmp.height);
+      if (big > lim) { // foto raksasa melebihi batas tekstur GPU -> perkecil
+        const k = lim / big;
+        const nb = await createImageBitmap(bmp, { resizeWidth: Math.round(bmp.width * k), resizeHeight: Math.round(bmp.height * k), resizeQuality: 'high' });
+        bmp.close(); bmp = nb;
+      }
+      if (S.img && S.img.close && !shots.some((x) => x.source && x.source.src === S.img)) { try { S.img.close(); } catch (e2) { /* abaikan */ } }
+      S.img = bmp;
       S.imgDate = file.lastModified || Date.now();
       S.params.dateTime = S.imgDate;
     } catch (err) {
@@ -1657,9 +1704,22 @@ function buildUI() {
     if (!shots.length) $('#viewer').hidden = true; else openViewer(Math.min(viewIdx, shots.length - 1));
   };
 
+  // geser kiri/kanan di galeri (HP)
+  let tx = 0, ty = 0;
+  const vwrap = $('.viewer-img');
+  vwrap.addEventListener('touchstart', (e) => { tx = e.touches[0].clientX; ty = e.touches[0].clientY; }, { passive: true });
+  vwrap.addEventListener('touchend', (e) => {
+    if (e.target.closest && e.target.closest('video')) return;
+    const dx = e.changedTouches[0].clientX - tx, dy = e.changedTouches[0].clientY - ty;
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) openViewer(viewIdx + (dx < 0 ? 1 : -1));
+  }, { passive: true });
+
   document.addEventListener('keydown', (e) => {
     if (e.target.matches('input,select,textarea')) return;
-    if (e.code === 'Space') { e.preventDefault(); if ($('#viewer').hidden) capture(); }
+    if (e.code === 'Space') {
+      if (e.target.closest && e.target.closest('button')) return; // tombol yang difokus menangani sendiri
+      e.preventDefault(); if (elViewer.hidden) onShutter();
+    }
     if (e.key === 'Escape') document.querySelectorAll('[data-close]')[0].click();
     if (!$('#viewer').hidden) {
       if (e.key === 'ArrowLeft') openViewer(viewIdx - 1);
@@ -1691,3 +1751,7 @@ function buildUI() {
   requestAnimationFrame(frame);
   startCamera();
 })();
+
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
+}
