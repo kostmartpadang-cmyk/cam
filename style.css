@@ -74,7 +74,7 @@ button{cursor:pointer;border:0;background:none}
 .shutter i{width:58px;height:58px;border-radius:50%;background:var(--text);transition:transform .1s,background .2s}
 .shutter:active i{transform:scale(.88);background:var(--accent)}
 .shutter.busy{opacity:.5;pointer-events:none}
-#btnTimer b{position:absolute;right:4px;bottom:4px;font:700 10px/1 ui-monospace,monospace;color:var(--accent)}
+#btnFlash b,#btnTimer b{position:absolute;right:4px;bottom:4px;font:700 10px/1 ui-monospace,monospace;color:var(--accent)}
 .thumb-btn{position:relative;width:48px;height:48px;border-radius:12px;overflow:hidden;background:var(--panel2);
   border:1px solid var(--line)}
 .thumb-btn img{width:100%;height:100%;object-fit:contain;display:block}
@@ -178,3 +178,10 @@ body.recording .modes,body.recording #btnOpen,body.recording #btnFlip{opacity:.3
 .rec-badge i{width:9px;height:9px;border-radius:50%;background:#ff3b4a;animation:recblink 1s infinite}
 @keyframes recblink{50%{opacity:.2}}
 #viewerVid{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
+
+/* zoom & flash */
+.stage{touch-action:none}
+.zoom-pill{left:50%;bottom:12px;right:auto;top:auto;position:absolute;transform:translateX(-50%);z-index:3;min-width:54px;
+  justify-content:center;font-variant-numeric:tabular-nums}
+#sflash{position:fixed;inset:0;z-index:45;background:#fff8ee;opacity:0;pointer-events:none;transition:opacity .1s}
+#sflash.on{opacity:1}

@@ -19,6 +19,7 @@
   <header class="top">
     <div class="brand">cam<span>·</span>awa <small id="resInfo"></small></div>
     <div class="top-actions">
+      <button class="icon-btn" id="btnFlash" aria-label="Flash"><svg class="i" data-i="boltOff"></svg><b id="flashLabel"></b></button>
       <button class="icon-btn" id="btnAdjust" aria-label="Atur filter"><svg class="i" data-i="sliders"></svg></button>
       <button class="icon-btn" id="btnSettings" aria-label="Pengaturan"><svg class="i" data-i="settings"></svg></button>
     </div>
@@ -29,6 +30,7 @@
     <canvas id="ovl" class="ovl" hidden></canvas>
     <div class="grid" id="grid"></div>
     <div id="flash"></div>
+    <button class="pill zoom-pill" id="btnZoom" aria-label="Zoom (cubit dua jari)"><span>1×</span></button>
     <div id="count"></div>
     <div id="msg" class="msg" hidden>
       <p id="msgText"></p>
@@ -153,6 +155,7 @@
   </div>
 </div>
 
+<div id="sflash" hidden></div>
 <div id="saving" hidden role="status"><div class="spin sm"></div><span id="savingText"></span></div>
 <div id="loading" hidden role="status" aria-live="polite"><div class="spin"></div><span id="loadingText">Memproses…</span></div>
 <div id="toast" role="status" aria-live="polite"></div>

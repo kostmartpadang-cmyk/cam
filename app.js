@@ -15,6 +15,8 @@ const ICONS = {
   trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>',
   calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
   x: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+  bolt: '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
+  boltOff: '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/><line x1="3" y1="3" x2="21" y2="21"/>',
 };
 document.querySelectorAll('svg[data-i]').forEach((el) => {
   el.setAttribute('viewBox', '0 0 24 24');
@@ -676,6 +678,8 @@ const S = {
   sound: true,
   timer: 0,
   dirty: true,
+  zoom: 1, zmin: 1, zmax: 5, hwZoom: false, // zoom: perangkat keras bila didukung, kalau tidak digital (crop)
+  flash: 'off', hasTorch: false, // 'off' | 'on' (saat jepret) | 'torch' (senter menyala terus)
 };
 const SAVED_KEYS = ['camRes', 'exportSize', 'format', 'ratio', 'mirror', 'grid', 'sensor', 'sound', 'facing', 'eco', 'date', 'dateStyle', 'autoSave', 'vidRes', 'vidAudio'];
 try {
@@ -730,6 +734,85 @@ function cropInfo(sw, sh, ratio = S.ratio) {
     rect = { x: 0, y: (1 - ch) / 2, w: 1, h: ch };
   }
   return { rect, pw: rect.w * sw, ph: rect.h * sh };
+}
+
+// zoom digital = memotong area sumber di sekitar tengah (dipakai pratinjau, foto, dan video)
+function zoomRect(r, z) {
+  if (!(z > 1.001)) return r;
+  const w = r.w / z, h = r.h / z;
+  return { x: r.x + (r.w - w) / 2, y: r.y + (r.h - h) / 2, w, h };
+}
+const dz = () => (S.hwZoom ? 1 : S.zoom); // bagian zoom yang harus dilakukan digital
+
+let zoomWant = null, zoomBusy = false;
+async function pumpHwZoom() {
+  if (zoomBusy) return;
+  zoomBusy = true;
+  try {
+    while (zoomWant != null && track) {
+      const z = zoomWant; zoomWant = null;
+      await track.applyConstraints({ advanced: [{ zoom: z }] });
+    }
+  } catch (e) { /* tidak didukung */ }
+  zoomBusy = false;
+}
+function updateZoomUI() {
+  const z = S.zoom;
+  $('#btnZoom span').textContent = (Math.abs(z - Math.round(z)) < 0.05 ? Math.round(z) : z.toFixed(1)) + '×';
+  $('#btnZoom').classList.toggle('on', z > 1.05);
+}
+function setZoom(z) {
+  S.zoom = Math.min(S.zmax, Math.max(S.zmin, z));
+  if (S.hwZoom && track) { zoomWant = S.zoom; pumpHwZoom(); } else S.dirty = true;
+  updateZoomUI();
+}
+function cycleZoom() {
+  const steps = [1, 2, 3, 5, 10].filter((v) => v <= S.zmax + 0.01);
+  setZoom(steps.find((v) => v > S.zoom + 0.05) || 1);
+}
+
+// ---- Flash: senter (kamera belakang) atau layar putih (kamera depan)
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+async function setTorch(on) {
+  if (!track || !S.hasTorch) return false;
+  try { await track.applyConstraints({ advanced: [{ torch: on }] }); return true; } catch (e) { return false; }
+}
+const flashOK = (m) => m === 'off' || (m === 'on' && (S.hasTorch || S.isFront)) || (m === 'torch' && S.hasTorch);
+function syncFlashUI() {
+  const b = $('#btnFlash');
+  b.classList.toggle('on', S.flash !== 'off');
+  b.querySelector('svg').innerHTML = ICONS[S.flash === 'off' ? 'boltOff' : 'bolt'];
+  $('#flashLabel').textContent = S.flash === 'on' ? 'ON' : S.flash === 'torch' ? 'LED' : '';
+}
+function setFlash(m) {
+  S.flash = m;
+  if (S.hasTorch) setTorch(m === 'torch');
+  syncFlashUI();
+  toast(m === 'off' ? 'Flash mati' : m === 'on' ? (S.hasTorch ? 'Flash menyala saat jepret' : 'Flash layar saat jepret') : 'Senter menyala terus');
+}
+function cycleFlash() {
+  if (S.mode !== 'camera') { toast('Flash hanya untuk kamera'); return; }
+  const order = ['off', 'on', 'torch'];
+  for (let i = 1; i <= 3; i++) {
+    const m = order[(order.indexOf(S.flash) + i) % 3];
+    if (flashOK(m)) { setFlash(m); return; }
+  }
+  toast('Flash tidak didukung di kamera/browser ini');
+}
+// dipanggil sebelum mengambil foto; mengembalikan fungsi pembersih (atau null)
+async function prepFlash() {
+  if (S.mode !== 'camera' || S.flash !== 'on') return null;
+  if (S.hasTorch && await setTorch(true)) {
+    await sleep(380); // beri waktu auto-exposure menyesuaikan
+    return () => { if (S.flash !== 'torch') setTorch(false); };
+  }
+  if (S.isFront) {
+    const el = $('#sflash');
+    el.hidden = false; void el.offsetWidth; el.classList.add('on');
+    await sleep(320);
+    return () => { el.classList.remove('on'); setTimeout(() => { el.hidden = true; }, 160); };
+  }
+  return null;
 }
 
 /* ---------- Komposisi (bingkai + cap tanggal) ---------- */
@@ -971,7 +1054,8 @@ function render(now) {
   const wasDirty = S.dirty;
   S.dirty = false;
   const [sw, sh] = srcSize();
-  const { rect, pw, ph } = cropInfo(sw, sh);
+  const ci = cropInfo(sw, sh), pw = ci.pw, ph = ci.ph;
+  const rect = zoomRect(ci.rect, dz());
   const sc = Math.min(1, PERF.max / Math.max(pw, ph));
   const w = Math.max(2, Math.round(pw * sc / 2) * 2), h = Math.max(2, Math.round(ph * sc / 2) * 2);
   const mirror = S.mode === 'camera' && S.isFront && S.mirror;
@@ -1059,6 +1143,11 @@ async function startCamera() {
     stopRecording();
     showMsg('Kamera terputus (mungkin dipakai aplikasi lain atau ada panggilan masuk). Tekan "Coba lagi".');
   };
+  const tcaps = track.getCapabilities ? track.getCapabilities() : {};
+  S.hasTorch = !!tcaps.torch;
+  if (tcaps.zoom) { S.hwZoom = true; S.zmin = tcaps.zoom.min || 1; S.zmax = Math.min(tcaps.zoom.max || 5, 10); }
+  else { S.hwZoom = false; S.zmin = 1; S.zmax = 5; }
+  S.zoom = 1; zoomWant = null; updateZoomUI();
   if (S.camRes === 'max' && track.getCapabilities) {
     try {
       const caps = track.getCapabilities();
@@ -1074,6 +1163,11 @@ async function startCamera() {
   try { await video.play(); } catch (e) { /* diabaikan */ }
   S.mode = 'camera';
   PERF.t0 = 0; PERF.n = 0; PERF.cpu = 0; PERF.camDowned = false;
+  if (S.flash === 'torch') {
+    if (S.hasTorch) setTorch(true);
+    else { S.flash = 'off'; toast('Senter tidak tersedia di kamera ini'); }
+  } else if (S.flash === 'on' && !flashOK('on')) { S.flash = 'off'; }
+  syncFlashUI();
   $('#btnBackCam').hidden = true;
   const upd = () => {
     if (video.videoWidth) $('#resInfo').textContent = `${video.videoWidth}×${video.videoHeight}`;
@@ -1159,6 +1253,7 @@ async function startRecording() {
   REC.mr.onstop = finishRecording;
   S.dirty = true;
   REC.on = true;
+  if (S.flash === 'on' && S.hasTorch) setTorch(true);
   if (!REC.direct) recDraw(S.params, previewR.canvas);
   REC.mr.start(1000);
   try { if (navigator.wakeLock) REC.lock = await navigator.wakeLock.request('screen'); } catch (e) { /* abaikan */ }
@@ -1179,6 +1274,7 @@ function stopRecording() {
 }
 
 async function finishRecording() {
+  if (S.flash !== 'torch') setTorch(false);
   if (REC.lock) { try { REC.lock.release(); } catch (e) { /* abaikan */ } REC.lock = null; }
   if (REC.mic) { REC.mic.getTracks().forEach((t) => t.stop()); REC.mic = null; }
   PERF.max = perfCeil();
@@ -1291,6 +1387,7 @@ async function burstHiRes(vr) {
     return null;
   } finally {
     try { await track.applyConstraints(camSize()); } catch (e) { /* abaikan */ }
+    if (S.hwZoom && S.zoom !== 1) { zoomWant = S.zoom; pumpHwZoom(); }
   }
 }
 
@@ -1322,9 +1419,10 @@ async function grabSource() {
   return { src, sw, sh, mirror };
 }
 
-function renderExport({ src, sw, sh, mirror, params, ratio, exportSize }) {
+function renderExport({ src, sw, sh, mirror, params, ratio, exportSize, zoom }) {
   if (!exportR || exportR.lost) exportR = new Renderer(document.createElement('canvas'));
-  const { rect, pw, ph } = cropInfo(sw, sh, ratio);
+  const ci = cropInfo(sw, sh, ratio), z = zoom || 1;
+  const rect = zoomRect(ci.rect, z), pw = ci.pw / z, ph = ci.ph / z;
   let scale = 1;
   if (exportSize === 'gallery') scale = Math.min(1, 1920 / Math.max(pw, ph));
   else if (exportSize === 'uhd') scale = 3840 / Math.max(pw, ph);
@@ -1380,7 +1478,7 @@ async function saveShot(shot) {
     const r = await renderToBlob({ ...shot, exportSize: 'gallery' });
     if (typeof ImageBitmap !== 'undefined' && shot.src instanceof ImageBitmap) {
       keep = { src: shot.src, sw: shot.sw, sh: shot.sh, mirror: shot.mirror, params: shot.params,
-               ratio: shot.ratio, format: shot.format, own: shot.src !== S.img };
+               ratio: shot.ratio, format: shot.format, zoom: shot.zoom, own: shot.src !== S.img };
     }
     addShot(r.blob, r.w, r.h, keep);
     const added = shots[shots.length - 1];
@@ -1410,9 +1508,10 @@ async function capture() {
   if (S.mode === 'camera' && !(video.readyState >= 2 && video.videoWidth)) { toast('Kamera belum siap'); return; }
   busy = true;
   $('#btnShutter').classList.add('busy');
-  let source;
+  let source, endFlash = null;
   try {
     if (S.timer > 0 && S.mode === 'camera') await countdown(S.timer);
+    endFlash = await prepFlash();
     const f = $('#flash');
     f.classList.remove('go'); void f.offsetWidth; f.classList.add('go');
     shutterSound();
@@ -1422,12 +1521,13 @@ async function capture() {
     toast('Gagal mengambil foto: ' + (e.message || e));
     return;
   } finally {
+    if (endFlash) endFlash();
     busy = false;
     $('#btnShutter').classList.remove('busy');
   }
   // simpan snapshot pengaturan supaya tidak berubah kalau filter diganti saat diproses
   const when = S.mode === 'image' && S.imgDate ? S.imgDate : Date.now(); // foto dari galeri memakai tanggal filenya
-  const shot = { ...source, params: { ...S.params, dateTime: when }, ratio: S.ratio, exportSize: S.exportSize, format: S.format };
+  const shot = { ...source, params: { ...S.params, dateTime: when }, ratio: S.ratio, exportSize: S.exportSize, format: S.format, zoom: dz() };
   pendingSaves++;
   toast(pendingSaves > 1 ? 'Memproses ' + pendingSaves + ' foto…' : 'Memproses foto…');
   exportChain = exportChain.then(() => saveShot(shot));
@@ -1745,6 +1845,9 @@ function buildUI() {
     }
     stopCamera();
     S.mode = 'image';
+    S.hwZoom = false; S.zmin = 1; S.zmax = 5; S.hasTorch = false; setZoom(1);
+    if (S.flash === 'torch') S.flash = 'off';
+    syncFlashUI();
     S.dirty = true;
     $('#msg').hidden = true;
     $('#btnBackCam').hidden = false;
@@ -1777,6 +1880,28 @@ function buildUI() {
     refreshThumb();
     if (!shots.length) $('#viewer').hidden = true; else openViewer(Math.min(viewIdx, shots.length - 1));
   };
+
+  // zoom: cubit dua jari, roda mouse, atau ketuk tombol zoom
+  $('#btnZoom').onclick = cycleZoom;
+  $('#btnFlash').onclick = cycleFlash;
+  syncFlashUI(); updateZoomUI();
+  const ptrs = new Map();
+  let pinch = null;
+  const two = () => { const [a, b] = [...ptrs.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+  elStage.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('button')) return;
+    ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (ptrs.size === 2) pinch = { d: Math.max(20, two()), z: S.zoom };
+  });
+  elStage.addEventListener('pointermove', (e) => {
+    if (!ptrs.has(e.pointerId)) return;
+    ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinch && ptrs.size >= 2) setZoom(pinch.z * two() / pinch.d);
+  });
+  const pup = (e) => { ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null; };
+  elStage.addEventListener('pointerup', pup);
+  elStage.addEventListener('pointercancel', pup);
+  elStage.addEventListener('wheel', (e) => { e.preventDefault(); setZoom(S.zoom * (e.deltaY < 0 ? 1.1 : 1 / 1.1)); }, { passive: false });
 
   // geser kiri/kanan di galeri (HP)
   let tx = 0, ty = 0;
