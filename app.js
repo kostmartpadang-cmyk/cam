@@ -980,15 +980,6 @@ if (hasRVFC) {
 }
 
 // Turun cepat bila tersendat, naik sangat hati-hati (tiap perubahan ukuran canvas = hentakan kecil).
-function camDown() {
-  const vw = video.videoWidth, vh = video.videoHeight, long = Math.max(vw, vh);
-  if (PERF.camDowned || !track || S.mode !== 'camera' || long <= 1300) return false;
-  PERF.camDowned = true;
-  const k = 1280 / long; // kecilkan dengan mempertahankan arah (potret/landscape) & bentuk
-  track.applyConstraints({ width: { ideal: Math.round(vw * k) }, height: { ideal: Math.round(vh * k) } })
-    .then(() => toast('Kamera diturunkan ke HD supaya lancar')).catch(() => {});
-  return true;
-}
 function tunePerf(now) {
   if (REC.on) { PERF.last = now; return; }
   const dt = Math.min(100, now - PERF.last);
@@ -1001,9 +992,8 @@ function tunePerf(now) {
   const base = Math.min(PERF.base, 40), floor = LOW ? 400 : 480;
   const bad = PERF.n > 60 && (PERF.ema > Math.max(26, base * 1.6) || PERF.cpu > 11);
   if (bad) {
-    if (PERF.cpu > 11 && camDown()) { /* unggah video 1080p terlalu mahal: kecilkan kamera */ }
-    else if (PERF.max > floor) PERF.max = Math.max(floor, Math.round(PERF.max * 0.8 / 16) * 16);
-    else camDown();
+    // hanya kecilkan kanvas pratinjau; resolusi kamera TIDAK diubah di tengah jalan (bisa berpindah mode sensor -> sudut pandang terpotong)
+    if (PERF.max > floor) PERF.max = Math.max(floor, Math.round(PERF.max * 0.8 / 16) * 16);
     if (now - PERF.lastUp < 15000) PERF.upWait = Math.min(PERF.upWait * 2, 300000); // naik tadi gagal -> tunggu lebih lama
     PERF.lastDown = now; PERF.ema = base; PERF.cpu = 0; PERF.calm = 0; PERF.cool = now + 2500;
   } else if (PERF.ema < base * 1.15 + 3 && PERF.cpu < 5) {
@@ -1157,7 +1147,15 @@ async function startCamera() {
   S.hasTorch = !!tcaps.torch;
   if (tcaps.zoom) { S.hwZoom = true; S.zmin = tcaps.zoom.min || 1; S.zmax = Math.min(tcaps.zoom.max || 5, 10); }
   else { S.hwZoom = false; S.zmin = 1; S.zmax = 5; }
-  S.zoom = 1; zoomWant = null; updateZoomUI();
+  S.zoom = 1; zoomWant = S.hwZoom ? 1 : null; updateZoomUI(); if (zoomWant) pumpHwZoom();
+  // Bila HP memberi mode lain (mis. 16:9 yang sudut pandangnya terpotong = terlihat ter-zoom), minta bentuk yang diinginkan (4:3 penuh)
+  try {
+    const st1 = track.getSettings ? track.getSettings() : {};
+    const want = isPortrait() ? 1 / streamAspect() : streamAspect();
+    if (st1.width && st1.height && Math.abs(st1.width / st1.height - want) / want > 0.04) {
+      await track.applyConstraints({ ...camSize(), aspectRatio: { exact: want } });
+    }
+  } catch (e) { /* tidak didukung: pakai apa adanya */ }
   if (S.camRes === 'max' && track.getCapabilities) {
     try {
       const caps = track.getCapabilities();
