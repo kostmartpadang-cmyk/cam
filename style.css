@@ -185,3 +185,12 @@ body.recording .modes,body.recording #btnOpen,body.recording #btnFlip{opacity:.3
   justify-content:center;font-variant-numeric:tabular-nums}
 #sflash{position:fixed;inset:0;z-index:45;background:#fff8ee;opacity:0;pointer-events:none;transition:opacity .1s}
 #sflash.on{opacity:1}
+
+/* ===== Responsif HP ===== */
+.pill{min-height:36px}
+input[type=range]{height:32px}
+.icon-btn:active,.tab:active,.chip:active,.modes button:active{opacity:.65}
+.btn:active,.pill:active{transform:scale(.96)}
+.sheet-head{position:relative;touch-action:none;cursor:grab}
+.sheet-head::before{content:"";position:absolute;left:50%;top:6px;width:36px;height:4px;margin-left:-18px;border-radius:2px;background:var(--line)}
+.sheet{position:fixed}

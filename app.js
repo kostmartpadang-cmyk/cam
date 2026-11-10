@@ -767,11 +767,13 @@ function setZoom(z) {
   updateZoomUI();
 }
 function cycleZoom() {
+  buzz();
   const steps = [1, 2, 3, 5, 10].filter((v) => v <= S.zmax + 0.01);
   setZoom(steps.find((v) => v > S.zoom + 0.05) || 1);
 }
 
 // ---- Flash: senter (kamera belakang) atau layar putih (kamera depan)
+const buzz = (ms = 8) => { try { if (navigator.vibrate) navigator.vibrate(ms); } catch (e) { /* abaikan */ } }; // getaran halus (Android)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function setTorch(on) {
   if (!track || !S.hasTorch) return false;
@@ -791,6 +793,7 @@ function setFlash(m) {
   toast(m === 'off' ? 'Flash mati' : m === 'on' ? (S.hasTorch ? 'Flash menyala saat jepret' : 'Flash layar saat jepret') : 'Senter menyala terus');
 }
 function cycleFlash() {
+  buzz();
   if (S.mode !== 'camera') { toast('Flash hanya untuk kamera'); return; }
   const order = ['off', 'on', 'torch'];
   for (let i = 1; i <= 3; i++) {
@@ -1294,6 +1297,7 @@ async function finishRecording() {
 }
 
 async function onShutter() {
+  buzz(14);
   if (S.shootMode !== 'video') { capture(); return; }
   if (REC.on) { stopRecording(); return; }
   if (busy) return;
@@ -1742,7 +1746,7 @@ function buildUI() {
     b.dataset.tab = p.c;
     b.setAttribute('role', 'option');
     b.innerHTML = `<i style="background:linear-gradient(135deg,${p.sw[0]},${p.sw[1]})">${p.e || ''}</i>${p.name}`;
-    b.onclick = () => { applyPreset(i); b.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' }); };
+    b.onclick = () => { buzz(); applyPreset(i); b.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' }); };
     f.appendChild(b);
   });
   const tabs = $('#tabs');
@@ -1880,6 +1884,20 @@ function buildUI() {
     refreshThumb();
     if (!shots.length) $('#viewer').hidden = true; else openViewer(Math.min(viewIdx, shots.length - 1));
   };
+
+  // sheet: ketuk di luar atau geser ke bawah untuk menutup
+  const closeSheets = () => { $('#adjust').hidden = true; $('#settings').hidden = true; };
+  document.addEventListener('pointerdown', (e) => {
+    if ($('#adjust').hidden && $('#settings').hidden) return;
+    if (e.target.closest('.sheet,#btnAdjust,#btnSettings,#toast')) return;
+    closeSheets();
+  }, true);
+  document.querySelectorAll('.sheet-head').forEach((hd) => {
+    let y0 = null;
+    hd.addEventListener('pointerdown', (e) => { if (!e.target.closest('button')) y0 = e.clientY; });
+    hd.addEventListener('pointerup', (e) => { if (y0 != null && e.clientY - y0 > 50) closeSheets(); y0 = null; });
+    hd.addEventListener('pointercancel', () => { y0 = null; });
+  });
 
   // zoom: cubit dua jari, roda mouse, atau ketuk tombol zoom
   $('#btnZoom').onclick = cycleZoom;
