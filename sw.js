@@ -1,5 +1,5 @@
 ﻿/* Service worker: muat instan & tetap jalan offline. Strategi stale-while-revalidate untuk berkas aplikasi. */
-const V = 'camawa-v7';
+const V = 'camawa-v8';
 const ASSETS = ['./', 'index.html', 'app.js', 'style.css', 'manifest.webmanifest', 'icon.svg'];
 
 self.addEventListener('install', (e) => {

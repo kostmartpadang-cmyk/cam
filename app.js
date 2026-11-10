@@ -663,12 +663,12 @@ const S = {
   facing: 'environment',
   isFront: false,
   camRes: LOW ? 'hd' : 'fhd', // pratinjau 1080p supaya ringan; hasil Ultra HD tetap lewat ekspor / mode sensor
-  exportSize: matchMedia('(pointer:coarse)').matches ? 'gallery' : 'uhd', // ukuran saat DIUNDUH/DIBAGIKAN; foto di galeri sengaja ringan
+  exportSize: 'orig', // ukuran saat DIUNDUH/DIBAGIKAN: resolusi penuh (paling jernih, tanpa diperbesar palsu); foto di galeri sengaja ringan
   format: 'jpeg',
   ratio: 'native',
   mirror: true,
   grid: false,
-  sensor: false, // kualitas maksimal (lebih lambat) — opsional di Pengaturan
+  sensor: typeof ImageCapture !== 'undefined', // foto sensor resolusi penuh (jernih); aktif otomatis bila didukung (Android/Chrome)
   eco: matchMedia('(pointer:coarse)').matches, // mode hemat: pratinjau 720 px, 24 fps
   vidRes: LOW ? '480' : '720', vidAudio: true, shootMode: 'foto',
   autoSave: true, // otomatis unduh ke HP setelah jepret
@@ -684,6 +684,12 @@ const S = {
 const SAVED_KEYS = ['camRes', 'exportSize', 'format', 'ratio', 'mirror', 'grid', 'sensor', 'sound', 'facing', 'eco', 'date', 'dateStyle', 'autoSave', 'vidRes', 'vidAudio'];
 try {
   const sv = JSON.parse(localStorage.getItem('camawa4') || '{}');
+  // sekali jalan: pengguna lama (pengaturan tersimpan lama) ikut mendapat default yang jernih
+  if (!localStorage.getItem('camawa-q2')) {
+    sv.exportSize = 'orig';
+    if (typeof ImageCapture !== 'undefined') sv.sensor = true;
+    localStorage.setItem('camawa-q2', '1');
+  }
   SAVED_KEYS.forEach((k) => { if (k in sv) S[k] = sv[k]; });
 } catch (e) { /* abaikan */ }
 const saveSettings = () => {
@@ -1374,6 +1380,16 @@ async function cropToAspect(bmp, vr) {
   return out;
 }
 
+// foto sensor bisa >8000 px (melebihi batas tekstur GPU): perkecil hanya bila perlu
+async function capBitmap(b) {
+  const lim = Math.min(previewR ? previewR.maxSize : 4096, 8192), big = Math.max(b.width, b.height);
+  if (big <= lim) return b;
+  const k = lim / big;
+  const nb = await createImageBitmap(b, { resizeWidth: Math.round(b.width * k), resizeHeight: Math.round(b.height * k), resizeQuality: 'high' });
+  b.close();
+  return nb;
+}
+
 // minta kamera naik ke resolusi tinggi sesaat, ambil frame, lalu kembalikan ke resolusi pratinjau
 async function burstHiRes(vr) {
   const before = video.videoWidth * video.videoHeight;
@@ -1411,7 +1427,8 @@ async function grabSource() {
         const caps = await ic.getPhotoCapabilities();
         const opt = {};
         if (caps.imageWidth && caps.imageHeight) { opt.imageWidth = caps.imageWidth.max; opt.imageHeight = caps.imageHeight.max; }
-        const bmp = await cropToAspect(await createImageBitmap(await ic.takePhoto(opt)), vr);
+        if (caps.fillLightMode && caps.fillLightMode.includes('off')) opt.fillLightMode = 'off'; // flash diatur lewat tombol ⚡, bukan otomatis
+        const bmp = await cropToAspect(await capBitmap(await createImageBitmap(await ic.takePhoto(opt))), vr);
         return { src: bmp, sw: bmp.width, sh: bmp.height, mirror };
       } catch (e) { /* coba cara lain */ }
     }
@@ -1465,7 +1482,7 @@ async function renderToBlob(shot) {
     const out = renderExport(shot);
     const w = out.width, h = out.height;
     const mime = shot.format === 'png' ? 'image/png' : 'image/jpeg';
-    const blob = await new Promise((r) => out.toBlob(r, mime, 0.92));
+    const blob = await new Promise((r) => out.toBlob(r, mime, 0.95));
     if (!blob) throw new Error('Gagal membuat file');
     if (out !== exportR.canvas) out.width = out.height = 0;
     return { blob, w, h };
@@ -1562,7 +1579,10 @@ function addShot(blob, w, h, source) {
   shots.push({ blob, w, h, source, hd: null, url: URL.createObjectURL(blob), name: `cam-awa-${stamp()}.${ext}` });
   // simpan sumber hanya untuk 8 foto terakhir agar memori tidak bengkak
   const withSrc = shots.filter((x) => x.source);
-  while (withSrc.length > 8) releaseSource(withSrc.shift());
+  // foto sensor besar memakan memori: batasi jumlah & total piksel sumber yang disimpan
+  const spx = (x) => x.source.sw * x.source.sh;
+  let tot = withSrc.reduce((t, x) => t + spx(x), 0);
+  while (withSrc.length > 1 && (withSrc.length > 8 || tot > 1.2e8)) { const r = withSrc.shift(); tot -= spx(r); releaseSource(r); }
   refreshThumb();
 }
 function refreshThumb() {
