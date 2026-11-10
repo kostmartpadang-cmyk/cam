@@ -883,28 +883,46 @@ function overlayLayer(p, w, h, full) {
 /* ---------- Loop pratinjau ---------- */
 // Resolusi pratinjau menyesuaikan diri: turun otomatis kalau perangkat kewalahan.
 const perfCeil = () => (S.eco ? (LOW ? 540 : 720) : COARSE ? 960 : 1280);
-const PERF = { max: perfCeil(), last: 0, drawn: 0, ema: 16, calm: 0, cool: 0 };
+const PERF = { max: perfCeil(), last: 0, drawn: 0, ema: 16, calm: 0, cool: 0, t0: 0, n: 0, base: 1e9, cpu: 0, lastDown: 0, lastUp: 0, upWait: 20000, camDowned: false };
 let exportBusy = 0; // >0 saat ekspor foto sedang jalan (adaptasi kualitas pratinjau dijeda)
 let newFrame = true;
 const hasRVFC = 'requestVideoFrameCallback' in HTMLVideoElement.prototype;
 if (hasRVFC) {
-  const cb = () => { newFrame = true; video.requestVideoFrameCallback(cb); };
+  // Render dipicu langsung oleh kedatangan frame kamera -> ritme frame rata (tidak ikut jitter rAF).
+  const cb = (t) => { newFrame = true; video.requestVideoFrameCallback(cb); render(performance.now()); };
   video.requestVideoFrameCallback(cb);
 }
 
+// Turun cepat bila tersendat, naik sangat hati-hati (tiap perubahan ukuran canvas = hentakan kecil).
+function camDown() {
+  if (PERF.camDowned || !track || S.mode !== 'camera' || video.videoWidth <= 1300) return false;
+  PERF.camDowned = true;
+  const asp = video.videoWidth / video.videoHeight;
+  track.applyConstraints({ width: { ideal: 1280 }, height: { ideal: Math.round(1280 / asp) } })
+    .then(() => toast('Kamera diturunkan ke HD supaya lancar')).catch(() => {});
+  return true;
+}
 function tunePerf(now) {
   if (REC.on) { PERF.last = now; return; }
   const dt = Math.min(100, now - PERF.last);
   PERF.last = now;
   if (document.hidden || dt <= 0 || PERF.cool > now || exportBusy) return;
-  PERF.ema = PERF.ema * 0.92 + dt * 0.08;
-  if (PERF.ema > 36 && PERF.max > 480) {
-    PERF.max = Math.max(480, Math.round(PERF.max * 0.8));
-    PERF.ema = 20; PERF.calm = 0; PERF.cool = now + 1500;
-  } else if (PERF.ema < 19) {
-    if (++PERF.calm > 400 && PERF.max < perfCeil()) { // ~6 detik stabil -> naikkan pelan-pelan
-      PERF.max = Math.min(perfCeil(), Math.round(PERF.max * 1.15));
-      PERF.calm = 0; PERF.cool = now + 1500;
+  if (!PERF.t0) PERF.t0 = now;
+  if (now - PERF.t0 < 2500) return; // pemanasan kamera & shader: jangan dinilai
+  PERF.ema = PERF.n++ ? PERF.ema * 0.92 + dt * 0.08 : dt;
+  if (PERF.n > 60 && PERF.ema > 6) PERF.base = Math.min(PERF.base, PERF.ema); // refresh rate layar (60/90/120 Hz atau hemat daya 30 Hz)
+  const base = Math.min(PERF.base, 40), floor = LOW ? 400 : 480;
+  const bad = PERF.n > 60 && (PERF.ema > Math.max(26, base * 1.6) || PERF.cpu > 11);
+  if (bad) {
+    if (PERF.cpu > 11 && camDown()) { /* unggah video 1080p terlalu mahal: kecilkan kamera */ }
+    else if (PERF.max > floor) PERF.max = Math.max(floor, Math.round(PERF.max * 0.8 / 16) * 16);
+    else camDown();
+    if (now - PERF.lastUp < 15000) PERF.upWait = Math.min(PERF.upWait * 2, 300000); // naik tadi gagal -> tunggu lebih lama
+    PERF.lastDown = now; PERF.ema = base; PERF.cpu = 0; PERF.calm = 0; PERF.cool = now + 2500;
+  } else if (PERF.ema < base * 1.15 + 3 && PERF.cpu < 5) {
+    if (++PERF.calm > 600 && PERF.max < perfCeil() && now - PERF.lastDown > PERF.upWait) {
+      PERF.max = Math.min(perfCeil(), Math.round(PERF.max * 1.2 / 16) * 16);
+      PERF.lastUp = now; PERF.calm = 0; PERF.cool = now + 2500;
     }
   } else PERF.calm = 0;
 }
@@ -929,9 +947,15 @@ else window.addEventListener('resize', () => { fitKey = ''; S.dirty = true; });
 
 function frame(now) {
   requestAnimationFrame(frame);
-  if (!glOK || previewR.lost) return;
-  if (!elViewer.hidden && !REC.on) return; // galeri menutupi layar: jangan buang GPU/baterai
+  if (!glOK || !previewR || previewR.lost) return;
+  if (!elViewer.hidden && !REC.on) { PERF.last = now; return; }
   tunePerf(now);
+  render(now); // untuk mode foto / perubahan filter; kamera sudah dirender oleh rVFC (di sini langsung berhenti bila tak ada yang baru)
+}
+
+function render(now) {
+  if (!glOK || !previewR || previewR.lost) return;
+  if (!elViewer.hidden && !REC.on) return; // galeri menutupi layar: jangan buang GPU/baterai
   let src = null;
   if (S.mode === 'camera') {
     if (video.readyState >= 2 && video.videoWidth) {
@@ -959,7 +983,9 @@ function frame(now) {
     previewR.setOverlay(ovCur);
     // mipmap saat sumber jauh lebih besar dari pratinjau (mencegah gerigi/glitch)
     // (ambang 2x: generateMipmap tiap frame mahal di GPU HP, selisih visual kecil di bawah 2x)
+    const t0 = performance.now();
     if (!previewR.draw(src, rect, w, h, S.params, mirror, sw > w * (S.mode === 'image' ? 1.4 : 3))) return;
+    if (S.mode === 'camera') PERF.cpu = PERF.cpu * 0.9 + (performance.now() - t0) * 0.1;
     // tanpa bingkai/overlay: tampilkan canvas WebGL langsung (hemat satu salinan per frame)
     const p = S.params, gc = previewR.canvas;
     if (p.frame === 'none') {
@@ -1047,6 +1073,7 @@ async function startCamera() {
   video.srcObject = stream;
   try { await video.play(); } catch (e) { /* diabaikan */ }
   S.mode = 'camera';
+  PERF.t0 = 0; PERF.n = 0; PERF.cpu = 0; PERF.camDowned = false;
   $('#btnBackCam').hidden = true;
   const upd = () => {
     if (video.videoWidth) $('#resInfo').textContent = `${video.videoWidth}×${video.videoHeight}`;
