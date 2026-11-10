@@ -1097,14 +1097,8 @@ function camSize() {
   const rw = (RES[S.camRes] || RES.fhd)[0], asp = streamAspect();
   const cap = S.camRes === 'fhd' || S.camRes === 'hd'; // jangan diam-diam memakai 4K
   const dim = (v) => (cap ? { ideal: v, max: 2560 } : { ideal: v });
-  // HP dipegang tegak -> minta frame POTRET (tinggi > lebar), seperti kamera bawaan; kalau tidak, banyak HP mengirim frame landscape
-  const portrait = isPortrait(), long = rw, short = Math.round(rw / asp);
-  return {
-    width: dim(portrait ? short : long), height: dim(portrait ? long : short),
-    aspectRatio: { ideal: portrait ? 1 / asp : asp }, frameRate: { ideal: 30 },
-  };
+  return { width: dim(rw), height: dim(Math.round(rw / asp)), aspectRatio: { ideal: asp } };
 }
-const isPortrait = () => window.innerHeight > window.innerWidth;
 
 function showMsg(text) {
   $('#msgText').textContent = text;
@@ -1153,15 +1147,7 @@ async function startCamera() {
   S.hasTorch = !!tcaps.torch;
   if (tcaps.zoom) { S.hwZoom = true; S.zmin = tcaps.zoom.min || 1; S.zmax = Math.min(tcaps.zoom.max || 5, 10); }
   else { S.hwZoom = false; S.zmin = 1; S.zmax = 5; }
-  S.zoom = 1; zoomWant = S.hwZoom ? 1 : null; updateZoomUI(); if (zoomWant) pumpHwZoom();
-  // Bila HP memberi mode lain (mis. 16:9 yang sudut pandangnya terpotong = terlihat ter-zoom), minta bentuk yang diinginkan (4:3 penuh)
-  try {
-    const st1 = track.getSettings ? track.getSettings() : {};
-    const want = isPortrait() ? 1 / streamAspect() : streamAspect();
-    if (st1.width && st1.height && Math.abs(st1.width / st1.height - want) / want > 0.04) {
-      await track.applyConstraints({ ...camSize(), aspectRatio: { exact: want } });
-    }
-  } catch (e) { /* tidak didukung: pakai apa adanya */ }
+  S.zoom = 1; zoomWant = null; updateZoomUI();
   if (S.camRes === 'max' && track.getCapabilities) {
     try {
       const caps = track.getCapabilities();
@@ -1967,15 +1953,6 @@ function buildUI() {
       if (e.key === 'ArrowLeft') openViewer(viewIdx - 1);
       if (e.key === 'ArrowRight') openViewer(viewIdx + 1);
     }
-  });
-  // putar HP: minta ulang kamera dengan orientasi yang sesuai (ditunda sebentar agar ukuran layar sudah final)
-  let lastPortrait = isPortrait(), rotT = 0;
-  window.addEventListener('resize', () => {
-    clearTimeout(rotT);
-    rotT = setTimeout(() => {
-      const p = isPortrait();
-      if (p !== lastPortrait) { lastPortrait = p; if (S.mode === 'camera' && !REC.on && stream) startCamera(); }
-    }, 350);
   });
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) { stopRecording(); if (S.mode === 'camera') stopCamera(); }
