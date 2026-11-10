@@ -373,6 +373,8 @@ void main(){
 const FRAG = `#version 300 es
 precision highp float;
 uniform sampler2D uTex;
+uniform sampler2D uOvl;   // lapisan stiker/tanggal (premultiplied)
+uniform float uOvlOn;
 uniform vec4 uRect;      // x,y,w,h (uv sumber, origin kiri-atas)
 uniform float uMirror;
 uniform vec2 uPx;        // 1/lebar, 1/tinggi output
@@ -513,6 +515,12 @@ void main(){
   float d = length(c);
   col *= mix(1.0, 1.0 - uVig, smoothstep(0.28, 0.78, d));
 
+  // lapisan stiker/tanggal digabung di GPU (tanpa canvas tambahan / salinan 2D)
+  if (uOvlOn > 0.5) {
+    vec4 ov = texture(uOvl, vec2(vUv.x, 1.0 - vUv.y));
+    col = ov.rgb + col * (1.0 - ov.a);
+  }
+
   // dither anti-banding
   col += (hash(gl_FragCoord.xy + uTime) - 0.5) / 255.0;
   o = vec4(clamp(col, 0.0, 1.0), 1.0);
@@ -567,6 +575,30 @@ class Renderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     this.maxSize = Math.min(gl.getParameter(gl.MAX_TEXTURE_SIZE), gl.getParameter(gl.MAX_RENDERBUFFER_SIZE));
+    // tekstur kedua (unit 1) untuk overlay; diisi 1x1 transparan supaya selalu lengkap
+    this.otex = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this.otex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.activeTexture(gl.TEXTURE0);
+    this.ovLayer = null; this.ovOn = false;
+  }
+  // layer = canvas hasil overlayLayer() atau null. Diunggah ke GPU hanya saat layer berganti.
+  setOverlay(layer) {
+    this.ovOn = !!layer;
+    if (!layer || layer === this.ovLayer) return;
+    const gl = this.gl;
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this.otex);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, layer);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    gl.activeTexture(gl.TEXTURE0);
+    this.ovLayer = layer;
   }
   u(name) {
     if (!(name in this.loc)) this.loc[name] = this.gl.getUniformLocation(this.prog, name);
@@ -595,12 +627,14 @@ class Renderer {
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     }
     gl.uniform1i(this.u('uTex'), 0);
+    gl.uniform1i(this.u('uOvl'), 1);
+    gl.uniform1f(this.u('uOvlOn'), this.ovOn ? 1 : 0);
     gl.uniform4f(this.u('uRect'), rect.x, rect.y, rect.w, rect.h);
     gl.uniform1f(this.u('uMirror'), mirror ? 1 : 0);
     gl.uniform2f(this.u('uPx'), 1 / w, 1 / h);
     gl.uniform1f(this.u('uTime'), Math.random());
     gl.uniform1f(this.u('uAspect'), w / h);
-    for (const k in UNIFORMS) gl.uniform1f(this.u(UNIFORMS[k]), p[k]);
+    for (const k in UNIFORMS) gl.uniform1f(this.u(UNIFORMS[k]), k === 'sharp' && this.noSharp ? 0 : p[k]);
     gl.uniform1f(this.u('uClock'), (performance.now() / 1000) % 1000);
     gl.uniform1f(this.u('uLite'), this.lite ? 1 : 0);
     gl.uniform1f(this.u('uHQ'), this.hq ? 1 : 0);
@@ -613,6 +647,11 @@ class Renderer {
   }
 }
 
+/* ---------- Tingkat perangkat ---------- */
+// HP lemah (RAM kecil / CPU sedikit) otomatis memakai pengaturan paling ringan; tetap bisa diubah di Pengaturan.
+const COARSE = matchMedia('(pointer:coarse)').matches;
+const LOW = COARSE && ((navigator.deviceMemory || 4) <= 3 || (navigator.hardwareConcurrency || 8) <= 4);
+
 /* ---------- State ---------- */
 const S = {
   params: { ...BASE },
@@ -621,15 +660,15 @@ const S = {
   img: null, // ImageBitmap/Image saat mode image
   facing: 'environment',
   isFront: false,
-  camRes: 'fhd', // pratinjau 1080p supaya ringan; hasil Ultra HD tetap lewat ekspor / mode sensor
-  exportSize: 'uhd', // ukuran saat DIUNDUH/DIBAGIKAN; foto di galeri sengaja ringan
+  camRes: LOW ? 'hd' : 'fhd', // pratinjau 1080p supaya ringan; hasil Ultra HD tetap lewat ekspor / mode sensor
+  exportSize: matchMedia('(pointer:coarse)').matches ? 'gallery' : 'uhd', // ukuran saat DIUNDUH/DIBAGIKAN; foto di galeri sengaja ringan
   format: 'jpeg',
   ratio: 'native',
   mirror: true,
   grid: false,
   sensor: false, // kualitas maksimal (lebih lambat) — opsional di Pengaturan
   eco: matchMedia('(pointer:coarse)').matches, // mode hemat: pratinjau 720 px, 24 fps
-  vidRes: '720', vidAudio: true, shootMode: 'foto',
+  vidRes: LOW ? '480' : '720', vidAudio: true, shootMode: 'foto',
   autoSave: true, // otomatis unduh ke HP setelah jepret
   date: true, // cap tanggal pada foto (bisa dimatikan langsung di layar kamera)
   dateStyle: 'minimal',
@@ -653,6 +692,9 @@ const vctx = view.getContext('2d');
 const video = document.createElement('video');
 video.playsInline = true;
 video.muted = true;
+video.setAttribute('playsinline', '');
+video.style.cssText = 'position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none';
+document.body.appendChild(video);
 let stream = null;
 let track = null;
 let previewR = null;
@@ -807,9 +849,9 @@ function drawPolaroidDate(ctx, w, h, ox, oy, p) {
 // Pola & stiker digambar SEKALI dengan resolusi rendah (maks 1400 px, cukup karena memang buram) lalu
 // diskalakan. Tanggal digambar tajam di ukuran akhir (di overlay hanya bila ukurannya tidak diperkecil).
 let ovCache = { key: '', cv: null };
-function overlayLayer(p, w, h) {
+function overlayLayer(p, w, h, full) {
   const hasPat = p.pat && PATTERNS[p.pat], hasDeco = p.deco && DECO[p.deco];
-  const k = Math.min(1, 1400 / Math.max(w, h));
+  const k = full ? 1 : Math.min(1, 1400 / Math.max(w, h));
   const dateHere = p.date && k === 1 && p.frame !== 'polaroid';
   if (!hasPat && !hasDeco && !dateHere) return null;
   const lw = Math.round(w * k), lh = Math.round(h * k);
@@ -840,7 +882,7 @@ function overlayLayer(p, w, h) {
 
 /* ---------- Loop pratinjau ---------- */
 // Resolusi pratinjau menyesuaikan diri: turun otomatis kalau perangkat kewalahan.
-const perfCeil = () => (S.eco ? 720 : matchMedia('(pointer:coarse)').matches ? 960 : 1280);
+const perfCeil = () => (S.eco ? (LOW ? 540 : 720) : COARSE ? 960 : 1280);
 const PERF = { max: perfCeil(), last: 0, drawn: 0, ema: 16, calm: 0, cool: 0 };
 let exportBusy = 0; // >0 saat ekspor foto sedang jalan (adaptasi kualitas pratinjau dijeda)
 let newFrame = true;
@@ -868,19 +910,8 @@ function tunePerf(now) {
 }
 
 const ovl = $('#ovl');
-// Lapisan pola/stiker/tanggal untuk pratinjau: digambar sekali ke canvas terpisah di atas video, bukan disalin tiap frame.
-function updateOverlayEl(p, w, h) {
-  const layer = overlayLayer(p, w, h);
-  if (!layer) { ovl.hidden = true; return; }
-  if (ovl._src !== layer) {
-    ovl.width = layer.width; ovl.height = layer.height;
-    ovl.getContext('2d').drawImage(layer, 0, 0);
-    ovl._src = layer;
-  }
-  ovl.hidden = false;
-}
 
-let fitKey = '', ovW = 0, ovH = 0, ovT = 0;
+let fitKey = '', ovW = 0, ovH = 0, ovT = 0, ovCur = null;
 function fitView() {
   const st = elStage, gc = previewR.canvas;
   const cur = gc.hidden ? view : gc;
@@ -911,7 +942,6 @@ function frame(now) {
     src = S.img;
   }
   if (!src) return;
-  if (S.eco && S.mode === 'camera' && !S.dirty && now - PERF.drawn < 40) return; // mode hemat: maks ~24 fps
   PERF.drawn = now;
   newFrame = false;
   const wasDirty = S.dirty;
@@ -919,21 +949,24 @@ function frame(now) {
   const [sw, sh] = srcSize();
   const { rect, pw, ph } = cropInfo(sw, sh);
   const sc = Math.min(1, PERF.max / Math.max(pw, ph));
-  const w = Math.max(2, Math.round(pw * sc)), h = Math.max(2, Math.round(ph * sc));
+  const w = Math.max(2, Math.round(pw * sc / 2) * 2), h = Math.max(2, Math.round(ph * sc / 2) * 2);
   const mirror = S.mode === 'camera' && S.isFront && S.mirror;
   try {
+    // stiker/tanggal masuk ke shader (dihitung ulang hanya bila perlu, bukan membuat string kunci tiap frame)
+    if (S.params.frame === 'none') {
+      if (wasDirty || w !== ovW || h !== ovH || now - ovT > 1000) { ovW = w; ovH = h; ovT = now; ovCur = overlayLayer(S.params, w, h, true); }
+    } else ovCur = null;
+    previewR.setOverlay(ovCur);
     // mipmap saat sumber jauh lebih besar dari pratinjau (mencegah gerigi/glitch)
     // (ambang 2x: generateMipmap tiap frame mahal di GPU HP, selisih visual kecil di bawah 2x)
-    if (!previewR.draw(src, rect, w, h, S.params, mirror, sw > w * 2)) return;
+    if (!previewR.draw(src, rect, w, h, S.params, mirror, sw > w * (S.mode === 'image' ? 1.4 : 3))) return;
     // tanpa bingkai/overlay: tampilkan canvas WebGL langsung (hemat satu salinan per frame)
     const p = S.params, gc = previewR.canvas;
     if (p.frame === 'none') {
       gc.hidden = false; view.hidden = true; // tampilkan canvas WebGL langsung
-      // lapisan stiker/tanggal hanya dihitung ulang bila perlu (bukan membuat string kunci tiap frame)
-      if (wasDirty || w !== ovW || h !== ovH || now - ovT > 1000) { ovW = w; ovH = h; ovT = now; updateOverlayEl(p, w, h); }
     } else { // bingkai Polaroid/film: perlu digabung (lebih berat)
       compose(view, gc, p);
-      view.hidden = false; gc.hidden = true; ovl.hidden = true;
+      view.hidden = false; gc.hidden = true;
     }
     fitView();
     if (REC.on) recDraw(p, gc);
@@ -954,7 +987,7 @@ function camSize() {
   const rw = (RES[S.camRes] || RES.fhd)[0], asp = streamAspect();
   const cap = S.camRes === 'fhd' || S.camRes === 'hd'; // jangan diam-diam memakai 4K
   const dim = (v) => (cap ? { ideal: v, max: 2560 } : { ideal: v });
-  return { width: dim(rw), height: dim(Math.round(rw / asp)), aspectRatio: { ideal: asp } };
+  return { width: dim(rw), height: dim(Math.round(rw / asp)), aspectRatio: { ideal: asp }, frameRate: { ideal: 30 } };
 }
 
 function showMsg(text) {
@@ -1029,8 +1062,8 @@ async function flipCamera() {
 }
 
 /* ---------- Rekam video ---------- */
-const REC = { on: false, mr: null, chunks: [], c: null, x: null, t0: 0, timer: 0, mic: null, lock: null, mime: '', ext: 'webm' };
-const VID = { '720': 1280, '1080': 1920 };
+const REC = { on: false, direct: false, w: 0, h: 0, tc: null, tx: null, tcT: 0, mr: null, chunks: [], c: null, x: null, t0: 0, timer: 0, mic: null, lock: null, mime: '', ext: 'webm' };
+const VID = { '480': 480, '720': 720, '1080': 1080 }; // sisi PENDEK (4:3 -> 960x720, bukan 1280x960)
 
 function pickMime() {
   const list = ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
@@ -1039,11 +1072,13 @@ function pickMime() {
 }
 
 // salin satu frame (canvas WebGL + lapisan stiker/tanggal, atau hasil bingkai) ke canvas rekam
+// Jalur langsung (tanpa bingkai): MediaRecorder merekam canvas WebGL itu sendiri, nol salinan per frame.
+// Jalur bingkai: gabungan bingkai disalin ke canvas 2D rekam.
 function recDraw(p, gc) {
-  const x = REC.x, c = REC.c;
   const src = p.frame === 'none' ? gc : view;
-  x.drawImage(src, 0, 0, c.width, c.height);
-  if (p.frame === 'none' && !ovl.hidden) x.drawImage(ovl, 0, 0, c.width, c.height);
+  if (!REC.direct) REC.x.drawImage(src, 0, 0, REC.c.width, REC.c.height);
+  const t = performance.now(); // gambar mini galeri: diperbarui jarang (WebGL tidak bisa dibaca setelah frame lewat)
+  if (t - REC.tcT > 2000) { REC.tcT = t; REC.tx.drawImage(src, 0, 0, REC.tc.width, REC.tc.height); }
 }
 
 function recTick() {
@@ -1061,22 +1096,33 @@ async function startRecording() {
   // ukuran rekaman tetap (genap) sesuai bentuk pratinjau
   const [sw, sh] = srcSize();
   const { pw, ph } = cropInfo(sw, sh);
-  const L = VID[S.vidRes] || 1280, sc = L / Math.max(pw, ph);
-  const w = Math.round(pw * sc / 2) * 2, h = Math.round(ph * sc / 2) * 2;
-  REC.c = document.createElement('canvas'); REC.c.width = w; REC.c.height = h;
-  REC.x = REC.c.getContext('2d', { alpha: false });
+  const T = VID[S.vidRes] || 720, sc = Math.min(1, T / Math.min(pw, ph));
+  const w = Math.max(2, Math.round(pw * sc / 2) * 2), h = Math.max(2, Math.round(ph * sc / 2) * 2);
+  const L = Math.max(w, h);
+  REC.direct = S.params.frame === 'none';
+  REC.tc = document.createElement('canvas'); REC.tc.width = 320; REC.tc.height = Math.round(320 * h / w);
+  REC.tx = REC.tc.getContext('2d'); REC.tcT = 0;
   PERF.max = L; // pratinjau dirender pada ukuran rekaman, dikunci selama merekam
-  // kamera: kunci 30 fps + minta stabilisasi bawaan perangkat bila ada
-  try { await track.applyConstraints({ frameRate: { ideal: 30, max: 30 }, advanced: [{ videoStabilizationMode: 'cinematic' }, { videoStabilizationMode: 'auto' }] }); } catch (e) { /* tidak didukung */ }
+  PERF.cool = performance.now() + 4000; // jangan biarkan penyetel otomatis mengubah ukuran saat persiapan
+  S.dirty = true;
+  if (REC.direct) {
+    // tunggu 2 frame supaya canvas WebGL sudah berukuran final sebelum perekam menangkapnya
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    REC.w = previewR.canvas.width; REC.h = previewR.canvas.height;
+  } else {
+    REC.c = document.createElement('canvas'); REC.c.width = w; REC.c.height = h;
+    REC.x = REC.c.getContext('2d', { alpha: false });
+    REC.w = w; REC.h = h;
+  }
   // suara (opsional): jika izin ditolak, video tetap direkam tanpa suara
   REC.mic = null;
   if (S.vidAudio) {
     try { REC.mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false }); }
     catch (e) { toast('Tanpa suara (izin mikrofon tidak diberikan)'); }
   }
-  const out = REC.c.captureStream(30);
+  const out = (REC.direct ? previewR.canvas : REC.c).captureStream(30);
   if (REC.mic) REC.mic.getAudioTracks().forEach((t) => out.addTrack(t));
-  const opts = { videoBitsPerSecond: L >= 1920 ? 8e6 : 4e6, audioBitsPerSecond: 128e3 };
+  const opts = { videoBitsPerSecond: T >= 1080 ? 6e6 : T >= 720 ? 3.5e6 : 2e6, audioBitsPerSecond: 128e3 };
   if (mime) opts.mimeType = mime;
   try { REC.mr = new MediaRecorder(out, opts); } catch (e) { REC.mr = new MediaRecorder(out); }
   REC.mime = REC.mr.mimeType || mime || 'video/webm';
@@ -1086,7 +1132,7 @@ async function startRecording() {
   REC.mr.onstop = finishRecording;
   S.dirty = true;
   REC.on = true;
-  recDraw(S.params, previewR.canvas);
+  if (!REC.direct) recDraw(S.params, previewR.canvas);
   REC.mr.start(1000);
   try { if (navigator.wakeLock) REC.lock = await navigator.wakeLock.request('screen'); } catch (e) { /* abaikan */ }
   REC.t0 = performance.now();
@@ -1114,11 +1160,8 @@ async function finishRecording() {
   const blob = new Blob(REC.chunks, { type: REC.mime.split(';')[0] });
   REC.chunks = [];
   // gambar mini untuk galeri
-  const tc = document.createElement('canvas');
-  tc.width = 320; tc.height = Math.round(320 * REC.c.height / REC.c.width);
-  tc.getContext('2d').drawImage(REC.c, 0, 0, tc.width, tc.height);
-  const thumb = await new Promise((r) => tc.toBlob(r, 'image/jpeg', 0.7));
-  const shot = { blob, w: REC.c.width, h: REC.c.height, source: null, hd: null, isVideo: true, dur,
+  const thumb = await new Promise((r) => REC.tc.toBlob(r, 'image/jpeg', 0.7));
+  const shot = { blob, w: REC.w, h: REC.h, source: null, hd: null, isVideo: true, dur,
     url: URL.createObjectURL(blob), thumb: URL.createObjectURL(thumb),
     name: 'cam-awa-' + stamp() + '.' + REC.ext };
   shots.push(shot);
@@ -1459,7 +1502,7 @@ async function pumpHD() {
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   try {
     while (hdQueue.length) {
-      if (pendingSaves > 0 || busy || dlBusy) { await sleep(400); continue; }
+      if (pendingSaves > 0 || busy || dlBusy || REC.on) { await sleep(400); continue; }
       const sh = hdQueue.shift();
       if (!sh.source || !shots.includes(sh)) {
         if (sh.auto) { autoPending = Math.max(0, autoPending - 1); updateSaving(); }
@@ -1605,6 +1648,7 @@ function buildUI() {
     const el = $(id);
     if (type === 'check') el.checked = !!S[key]; else el.value = S[key];
     el.onchange = () => {
+      if (REC.on && (key === 'camRes' || key === 'ratio')) { toast('Hentikan rekaman dulu'); el.value = S[key]; return; }
       S[key] = type === 'check' ? el.checked : el.value;
       saveSettings();
       S.dirty = true;
@@ -1627,7 +1671,10 @@ function buildUI() {
     const keys = Object.keys(DATE_STYLES);
     setDateStyle(keys[(keys.indexOf(S.dateStyle) + 1) % keys.length]);
   };
-  $('#setFrame').onchange = (e) => { S.params.frame = e.target.value; S.dirty = true; };
+  $('#setFrame').onchange = (e) => {
+    if (REC.on && REC.direct && e.target.value !== 'none') { toast('Bingkai tidak bisa diganti saat merekam'); e.target.value = 'none'; return; }
+    S.params.frame = e.target.value; S.dirty = true;
+  };
 
   // tombol
   $('#btnShutter').onclick = onShutter;
@@ -1743,6 +1790,7 @@ function buildUI() {
     $('#stage').insertBefore(gc, $('#ovl'));
     previewR = new Renderer(gc);
     previewR.lite = true; // shader pratinjau lebih ringan; ekspor tetap kualitas penuh
+    previewR.noSharp = LOW; // HP lemah: lewati ketajaman di pratinjau (hasil foto tetap tajam)
   } catch (e) {
     glOK = false;
     showMsg('Browser ini belum mendukung WebGL2, yang dibutuhkan untuk filter. Coba Chrome, Edge, Firefox, atau Safari versi terbaru.');
